@@ -23,7 +23,7 @@ const who=input.character;const prior=input.messages;if(!personality[who]||!Arra
 const messages=prior.slice(-20).filter(m=>m&&['user','model'].includes(m.role)&&typeof m.text==='string').map(m=>({role:m.role,parts:[{text:m.text.slice(0,1500)}]}));
 if(!messages.length||messages[messages.length-1].role!=='user')return json({error:'A user message is required'},400);
 try{
-const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent';
+const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
 const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality[who]}]},contents:messages,generationConfig:{maxOutputTokens:600,temperature:0.85,thinkingConfig:{thinkingBudget:0}}})});
 const out=await upstream.json();
 if(!upstream.ok)return json({error:'Gemini error ('+upstream.status+'): '+(out.error?.message||'Check free tier quota and model availability').slice(0,240)},502);
