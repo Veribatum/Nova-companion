@@ -111,10 +111,14 @@ export function mountNova3D(el){
  rig=loaded;riggedRoot=loaded.root;
  rigAnchor=new THREE.Group();rigAnchor.position.copy(root.position);
  rigAnchor.add(riggedRoot);scene.add(rigAnchor);root.visible=false;
- // Start on the authored bind pose; never freeze the character halfway through a run.
- if(rig.run){rig.run.stop();rig.mixer?.stopAllAction();rig.mixer?.update(0)}
- // Small additive movements only, relative to the character's own bone rest rotations.
- try { rigMotion=null; }
+ // Drive the character's skeleton with its own animation data only.
+ if(rig.run){rig.run.stop();rig.mixer?.stopAllAction();}
+ try {
+   const motion=await import('./nova-native-motion.js');
+   if(disposed)return;
+   rigMotion=motion.createNativeMotion(rig);
+ }catch(e){console.warn('Nova native animation initialization failed',e)}
+
  catch(e){console.warn('Nova motion fallback unavailable',e)}
  // Disable cross-skeleton animation retargeting: it deforms this mesh.
  // Use its original animation and rest pose until a compatible asset is available.
@@ -133,12 +137,8 @@ export function mountNova3D(el){
  if(rig){
   // A single controller owns the skeleton at a time. The fallback only uses
   // the model's own authored clip; gestures never overwrite retargeted poses.
-  // This asset only contains a running clip whose transforms deform its mesh.
-  // Do not play that clip: a stable rest pose is better than a twisted model.
-  // Move the whole actor through the scene without modifying skinning bones.
-  if(rig.mixer && rigWasMoving)rig.mixer.stopAllAction();
+  if(rigMotion)rigMotion.update(moving,dt);
   rigWasMoving=moving;
-  
   if(rigAnchor){
    rigAnchor.position.copy(root.position);
    rigAnchor.rotation.y=root.rotation.y;
@@ -163,5 +163,5 @@ export function mountNova3D(el){
  camera.userData.look.lerp(gaze,Math.min(1,dt*2));
  camera.lookAt(camera.userData.look);
  renderer.render(scene,camera)}clock.start();tick();
- return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;naturalMotion?.dispose();cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
+ return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;rigMotion?.dispose?.();naturalMotion?.dispose();cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
 }
