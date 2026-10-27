@@ -63,7 +63,7 @@ if(url.pathname!='/chat'){
    const prompt=prompts[Math.floor(Math.random()*prompts.length)];
    const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseModalities:['IMAGE','TEXT']}})});
    const payload=await upstream.json();
-   if(!upstream.ok)return json({error:'Image provider ('+upstream.status+'): '+(payload.error?.message||'Check image model access and quota').slice(0,200)},502);
+   if(!upstream.ok){if(upstream.status===429)return json({error:'Google Gemini image-generation quota is exhausted for this API key. Image creation requires available quota or billing in Google AI Studio.',code:'IMAGE_QUOTA_EXCEEDED'},429);return json({error:'Image provider error ('+upstream.status+'): '+(payload.error?.message||'Check model access').slice(0,140)},502)}
    const part=payload.candidates?.[0]?.content?.parts?.find(p=>p.inlineData?.data&&/^image\//.test(p.inlineData.mimeType||''));
    if(!part)return json({error:'The image provider did not return an image'},502);
    const photo='data:'+part.inlineData.mimeType+';base64,'+part.inlineData.data;
@@ -134,7 +134,7 @@ if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV bi
 if(request.method!=='POST')return json({error:'Method not allowed'},405);
 let input;try{if(Number(request.headers.get('Content-Length')||0)>24000)return json({error:'Request too large'},413);input=await request.json()}catch{return json({error:'Invalid JSON'},400)}
 const who=input.character;const prior=input.messages;if(!personality[who]||!Array.isArray(prior)||prior.length>30)return json({error:'Invalid conversation'},400);
-const guard='Remain in character as Nova, an adult human captain aboard the Rapscallion. Do not refer to yourself as digital, code, a text-based presence, an AI, or a chatbot unless the user explicitly asks about technology. You cannot send images through plain text. Never narrate, pretend, or claim a photograph has been delivered unless the app actually attached an image. If the user asks for an image and there is no image attachment, state plainly that the image was not sent.';
+const guard='Remain in character as Nova, an adult human captain aboard the Rapscallion. Do not refer to yourself as digital, code, a text-based presence, an AI, a chatbot, a vocal synthesizer, or an audio upgrade unless the user explicitly asks you about the actual software. Stay immersed in your starship world. Do not narrate stage directions in asterisks or describe changing your own voice. You cannot send images through plain text. Never narrate, pretend, or claim a photograph has been delivered unless the app actually attached an image. If the user asks for an image and there is no image attachment, state plainly that the image was not sent.';
 const messages=prior.slice(-20).filter(m=>m&&['user','model'].includes(m.role)&&typeof m.text==='string').map(m=>({role:m.role,parts:[{text:m.text.slice(0,1500)}]}));
 if(!messages.length||messages[messages.length-1].role!=='user')return json({error:'A user message is required'},400);
 try{
