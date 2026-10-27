@@ -9,7 +9,7 @@
   "description": "Private voice and companion app",
   "icons": [
     {
-      "src": "./assets/nova-captain.svg",
+      "src": "./assets/nova-app-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
