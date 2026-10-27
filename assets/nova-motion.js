@@ -4,7 +4,7 @@ import * as THREE from 'https://esm.sh/three@0.170.0';
 const keys=['Hips','Spine','Spine1','Spine2','Neck','Head','LeftShoulder','RightShoulder','LeftArm','RightArm','LeftForeArm','RightForeArm','LeftUpLeg','RightUpLeg','LeftLeg','RightLeg'];
 const angle=(axis,r)=>new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...axis),r);
 export function createNovaMotion(model){
- const bones={};model.traverse(o=>{if(!o.isBone)return;const name=o.name.replace(/^.*[:|]/,'');if(keys.includes(name))bones[name]={bone:o,base:o.quaternion.clone()}});
+ const bones={};model.traverse(o=>{if(!o.isBone)return;const name=o.name.replace(/^.*[:|]/,'').replace(/^mixamorig[_:]?/i,'');if(keys.includes(name))bones[name]={bone:o,base:o.quaternion.clone()}});
  let previous='idle',blend=0;
  function apply(name,rx=0,ry=0,rz=0,dt=.016){
   const item=bones[name];if(!item)return;
