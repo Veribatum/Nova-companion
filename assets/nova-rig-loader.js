@@ -42,7 +42,7 @@ root.traverse(obj=>{if(!obj.isMesh)return;const materials=Array.isArray(obj.mate
  mat.needsUpdate=true;
  })});
 root.traverse(obj=>{if(obj.isMesh){obj.frustumCulled=false;obj.castShadow=true}});
-const clips=root.animations||[];const mixer=clips.length?new THREE.AnimationMixer(root):null;let run=null;if(mixer){run=mixer.clipAction(clips.find(x=>/run|walk/i.test(x.name))||clips[0]);run.play();run.paused=true}
+const clips=root.animations||[];const mixer=clips.length?new THREE.AnimationMixer(root):null;let run=null;if(mixer){run=mixer.clipAction(clips.find(x=>/run|walk/i.test(x.name))||clips[0]);run.enabled=false}
 return {root,mixer,run,animations:clips.map(c=>c.name),height};}
 export async function importNovaRig(file){if(!file)throw Error('Select a ZIP or FBX');if(file.size>75000000)throw Error('Model too large (75 MB maximum)');const parts=decodeArchive(await file.arrayBuffer(),file.name);const preview=makeModel(parts);await put({fbx:parts.fbx,maps:parts.maps});return {name:file.name,animations:preview.animations,height:preview.height,textures:Object.keys(parts.maps||{})}}
 let remoteRigPromise=null;
