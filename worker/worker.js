@@ -101,8 +101,8 @@ if(url.pathname==='/voice'&&request.method==='POST'){
  const voice={nova:'Aoede',sylvanas:'Kore',samus:'Zephyr',jenny:'Leda'}[persona];
  const style={nova:'Warm, playful, confident and affectionately teasing, with the natural pauses of a real person',sylvanas:'Elegant, assured and gently teasing',samus:'Grounded, warm and dry-humored',jenny:'Bright, witty, naturally friendly'}[persona];
  try{
-  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent';
-  const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:content,speech_metadata:{style}}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{voice}}}})});
+  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent';
+  const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:'Say naturally, '+style+': '+content}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}})});
   const output=await upstream.json();
   if(!upstream.ok)return json({error:(upstream.status===429?'Gemini natural voice usage limit reached: ':'Neural voice provider '+upstream.status+': ')+(output.error?.message||'Model permission, quota, or network error').slice(0,180),code:upstream.status===429?'VOICE_QUOTA_EXCEEDED':'VOICE_PROVIDER_ERROR'},upstream.status===429?429:502);
   const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
