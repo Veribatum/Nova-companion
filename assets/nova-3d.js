@@ -104,14 +104,14 @@ export function mountNova3D(el){
  const insignia=new THREE.Group();insignia.position.set(3.05,3.25,-5.75);scene.add(insignia);
  for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
  const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
- const nova=makeNovaRebuilt();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigAnchor=null,rigMotion=null,naturalMotion=null,rigWasMoving=false,rigFrame=0,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
+ const nova=makeNovaRebuilt();const {root,body,head,arms}=nova;scene.add(root);root.position.set(.95,0,-1.55);let rig=null,riggedRoot=null,rigAnchor=null,rigMotion=null,naturalMotion=null,rigWasMoving=false,rigFrame=0,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
  // Nova Mk II is procedural. There is deliberately no rig loader or FBX.
  el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['idle','walk','wave','talk','flirt']}}));
  el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:['idle','walk','wave','talk','flirt']}}));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
- const destinations={window:new THREE.Vector3(-1.6,0,-2.6),console:new THREE.Vector3(1.5,0,-2.1),chair:new THREE.Vector3(1.65,0,-.6),center:new THREE.Vector3(-.35,0,-.45)};
- const action=(name)=>{nova.action(name);if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-1.45,0,-.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
+ const destinations={window:new THREE.Vector3(-.55,0,-2.5),console:new THREE.Vector3(1.45,0,-2.35),chair:new THREE.Vector3(1.45,0,-1.3),center:new THREE.Vector3(.75,0,-1.3)};
+ const action=(name)=>{nova.action(name);if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(.65,0,-1.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
  let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;sceneTime=t;
@@ -130,8 +130,8 @@ export function mountNova3D(el){
   }
  }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);
   // Walkable aisle: stay clear of wall panels, berth, sofa and foreground table.
-  root.position.x=THREE.MathUtils.clamp(root.position.x,-1.9,1.9);
-  root.position.z=THREE.MathUtils.clamp(root.position.z,-3.05,.55);
+  root.position.x=THREE.MathUtils.clamp(root.position.x,-.65,1.8);
+  root.position.z=THREE.MathUtils.clamp(root.position.z,-2.7,-1.0);
   root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode=focusMode==='closeup'?'flirt':focusMode==='lounge'?'lounge':'idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
  if(mode==='wave'){arms[1].rotation.z=-1.15+Math.sin(t*11)*.2;if(phase>2){mode='idle';arms[1].rotation.z=0}}else arms[1].rotation.z=0;
  if(focusedUntil&&performance.now()>focusedUntil){focusedUntil=0;focusMode='normal';if(mode==='flirt'||mode==='lounge')mode='idle'}
