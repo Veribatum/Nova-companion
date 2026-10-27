@@ -101,14 +101,28 @@ if(url.pathname==='/voice'&&request.method==='POST'){
  const voice={nova:'Aoede',sylvanas:'Kore',samus:'Zephyr',jenny:'Leda'}[persona];
  const style={nova:'Warm, playful, confident and affectionately teasing, with the natural pauses of a real person',sylvanas:'Elegant, assured and gently teasing',samus:'Grounded, warm and dry-humored',jenny:'Bright, witty, naturally friendly'}[persona];
  try{
-  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent';
-  const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:'Say naturally, '+style+': '+content}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}})});
-  const output=await upstream.json();
-  if(!upstream.ok)return json({error:(upstream.status===429?'Gemini natural voice usage limit reached: ':'Neural voice provider '+upstream.status+': ')+(output.error?.message||'Model permission, quota, or network error').slice(0,180),code:upstream.status===429?'VOICE_QUOTA_EXCEEDED':'VOICE_PROVIDER_ERROR'},upstream.status===429?429:502);
-  const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
-  if(!part)return json({error:'Neural voice returned no audio'},502);
-  return json({audio:part.inlineData.data,mimeType:part.inlineData.mimeType||'audio/L16;rate=24000'});
+  const variants=[
+   {model:'gemini-2.5-flash-preview-tts',parts:[{text:'Say in a '+style+' style: '+content}],voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}},
+   {model:'gemini-3.8-flash-tts',parts:[{text:content,speech_metadata:{style}}],voiceConfig:{voice}}
+  ];
+  let failure=null;
+  for(const variant of variants){
+   try{
+    const endpoint='https://generativelanguage.googleapis.com/v1beta/models/'+variant.model+':generateContent';
+    const upstream=await fetch(endpoint,{
+     method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},
+     body:JSON.stringify({contents:[{role:'user',parts:variant.parts}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:variant.voiceConfig}}})
+    });
+    const output=await upstream.json();
+    if(!upstream.ok){failure={status:upstream.status,message:output.error?.message||'Speech provider unavailable'};continue}
+    const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
+    if(part)return json({audio:part.inlineData.data,mimeType:part.inlineData.mimeType||'audio/L16;rate=24000',model:variant.model});
+    failure={status:502,message:'Speech provider returned no playable audio'};
+   }catch(e){failure={status:502,message:String(e).slice(0,150)}}
+  }
+  return json({error:'Natural voice unavailable: '+(failure?.message||'All voice providers failed').slice(0,200),code:failure?.status===429?'VOICE_QUOTA_EXCEEDED':'VOICE_PROVIDER_ERROR'},failure?.status===429?429:502);
  }catch(e){return json({error:'Neural voice connection failed'},502)}
+
 }
 if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
  if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
