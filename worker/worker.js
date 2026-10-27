@@ -69,6 +69,28 @@ if(url.pathname!='/chat'){
   index.unshift(photo);await writeStore(env,'nova:photo_index',index.slice(0,1000));
   return json({uploaded:true,id:photo.id});
  }
+ if(url.pathname==='/photos/generate'&&request.method==='POST'){
+  if(!env.GEMINI_API_KEY)return json({error:'Image generation is not configured'},503);
+  const prompts=[
+   'A natural candid smartphone selfie of Nova smiling in the warmly lit observation lounge of a lived-in independent sci-fi spaceship, auburn red hair, green eyes, freckles, adult woman, fitted casual black tank top, cinematic photorealistic, a real personal snapshot, no captions or logos',
+   'A candid photo of Nova, an adult red-haired freckled woman with bright green eyes in a tasteful stylish low-neck casual outfit, sitting in the captain chair of a cozy starship bridge with amber lighting, photorealistic, warm affectionate eye contact, natural smartphone photograph',
+   'An adult auburn red-haired, green-eyed, freckled sci-fi adventurer named Nova taking a relaxed everyday selfie in her spaceship quarters, tasteful fitted shirt, playful smile, high quality realistic photography, no text'
+  ];
+  try{
+   const prompt=prompts[Math.floor(Math.random()*prompts.length)];
+   const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseModalities:['IMAGE','TEXT']}})});
+   const payload=await upstream.json();
+   if(!upstream.ok)return json({error:'Image provider ('+upstream.status+'): '+(payload.error?.message||'Check image model access and quota').slice(0,200)},502);
+   const part=payload.candidates?.[0]?.content?.parts?.find(p=>p.inlineData?.data&&/^image\//.test(p.inlineData.mimeType||''));
+   if(!part)return json({error:'The image provider did not return an image'},502);
+   const photo='data:'+part.inlineData.mimeType+';base64,'+part.inlineData.data;
+   if(photo.length>6000000)return json({error:'Generated image is too large to store'},413);
+   const item={id:crypto.randomUUID(),added:Date.now(),generated:true};
+   await env.NOVA_KV.put('nova:photo:'+item.id,photo);
+   const index=await readStore(env,'nova:photo_index',[]);index.unshift(item);await writeStore(env,'nova:photo_index',index.slice(0,1000));
+   return json({photo,id:item.id,generated:true});
+  }catch(e){return json({error:'Image generation request failed'},502)}
+ }
  if(url.pathname==='/photos/test-message'&&request.method==='POST'){
   const index=await readStore(env,'nova:photo_index',[]);if(!index.length)return json({error:'Upload photos first'},400);
   const chosen=index[Math.floor(Math.random()*index.length)];
