@@ -35,30 +35,79 @@ export function mountNova3D(el){
  if(!el)return {destroy(){},action(){}};
  let renderer;try{renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power'});}catch(e){el.textContent='3D unavailable on this device';return {destroy(){},action(){}}}
  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));renderer.setClearColor('#100f20');renderer.outputColorSpace=THREE.SRGBColorSpace;el.appendChild(renderer.domElement);
- const scene=new THREE.Scene();scene.background=new THREE.Color('#111528');scene.fog=new THREE.Fog('#111528',10,21);
- const camera=new THREE.PerspectiveCamera(49,1,.1,70);camera.position.set(0,3.1,8.7);camera.lookAt(0,1.65,-.7);
- scene.add(new THREE.HemisphereLight('#bad5ff','#30202e',2));
- const light=new THREE.PointLight('#ffc5a3',45,12);light.position.set(-3,4,2);scene.add(light);
- const ambient=new THREE.PointLight('#6388ff',34,12);ambient.position.set(3,4,-3);scene.add(ambient);
- const floorMat=S('#222733',.5,.2),wallMat=S('#1a2231',.7,.1),trim=S('#5b718f',.34,.6),glow=new THREE.MeshBasicMaterial({color:'#65cffa'}),glass=new THREE.MeshBasicMaterial({color:'#070e22'});
- box(scene,floorMat,[0,-.15,-.8],[10,.3,11]);box(scene,wallMat,[0,2.5,-6.05],[10,5,.3]);
- for(let i=-4;i<=4;i+=2){box(scene,trim,[i,0,-.7],[.045,.01,10]);box(scene,trim,[i,4.45,-5.85],[.06,.06,.15])}
- for(let i=0;i<5;i++){box(scene,trim,[-4.86,2.2-i*.75,-1.25],[.09,.035,8]);box(scene,trim,[4.86,2.2-i*.75,-1.25],[.09,.035,8])}
- box(scene,wallMat,[-4.95,2.4,-.8],[.2,5,11]);box(scene,wallMat,[4.95,2.4,-.8],[.2,5,11]);
- // Viewport: dark starfield behind a substantial panoramic window.
- box(scene,trim,[0,2.75,-5.82],[7.8,3.35,.12]);box(scene,glass,[0,2.75,-5.7],[7.52,3.06,.15]);
- for(let i=0;i<90;i++){const x=(((i*97)%113)/113-.5)*7.1,y=1.4+((i*47)%97)/97*2.65;const star=ell(scene,i%8===0?S('#a0ddff'):white,[x,y,-5.57],[.012+(i%5)*.007,.012+(i%5)*.007,.012],7);star.userData.star=true}
- for(let i=-1;i<=1;i++)box(scene,trim,[i*2.5,2.75,-5.52],[.09,3.15,.1]);
- const screen=new THREE.MeshBasicMaterial({color:'#286b92'}),screen2=new THREE.MeshBasicMaterial({color:'#81cff0'});
- for(let i=0;i<3;i++){const x=-3.2+i*3.2;box(scene,armor2,[x,.55,-4.55],[2.5,.85,1.2]);box(scene,screen,[x,.92,-4.5],[2.1,.065,.85]);for(let j=0;j<5;j++)box(scene,screen2,[x-.8+j*.36,.96,-4.55+j%2*.1],[.16,.01,.035])}
- // Captain's chair and a glowing central table.
- box(scene,armor,[3.25,.55,-1.5],[1.45,.35,1.35]);box(scene,armor2,[3.25,1.35,-1.92],[1.35,1.7,.27]);box(scene,trim,[3.25,.65,-1.4],[1.1,.08,1.05]);
- box(scene,armor,[0,.45,-2.6],[1.5,.8,1]);box(scene,screen,[0,.88,-2.6],[1.42,.03,.92]);
+
+ const scene=new THREE.Scene();scene.background=new THREE.Color('#0b101c');scene.fog=new THREE.Fog('#11101a',13,26);
+ const camera=new THREE.PerspectiveCamera(53,1,.1,70);camera.position.set(0,3.6,9.8);camera.lookAt(0,1.85,-1.7);
+ scene.add(new THREE.HemisphereLight('#e2bba3','#261c29',1.65));
+ const light=new THREE.PointLight('#ffb36a',45,11);light.position.set(-2,4.3,1);scene.add(light);
+ const ambient=new THREE.PointLight('#648bc5',20,11);ambient.position.set(-4,3,-4);scene.add(ambient);
+ const deskLamp=new THREE.PointLight('#ffba72',19,5);deskLamp.position.set(3,2,-3.5);scene.add(deskLamp);
+ const floorMat=S('#292727',.8,.16),wallMat=S('#211b1b',.75,.23),trim=S('#6b5550',.38,.52),
+  brass=S('#b08353',.38,.75),sofa=S('#272128',.96),redFabric=S('#4a1528',.95),
+  wood=S('#49382c',.75),darkPanel=S('#141821',.35,.26),screen=new THREE.MeshBasicMaterial({color:'#28465b'}),
+  screen2=new THREE.MeshBasicMaterial({color:'#86b4c4'}),glow=new THREE.MeshBasicMaterial({color:'#ffbd77'}),
+  starMat=new THREE.MeshBasicMaterial({color:'#e3ebfd'}),glass=new THREE.MeshBasicMaterial({color:'#07101e'});
+ const panel=(parent,mat,x,y,z,w,h,d)=>box(parent,mat,[x,y,z],[w,h,d]);
+ // Industrial steel cabin and grated floor.
+ panel(scene,floorMat,0,-.15,-1,10,.3,11);
+ panel(scene,wallMat,0,2.5,-6.02,10,5,.28);
+ panel(scene,wallMat,-4.92,2.5,-1,.2,5,10);
+ panel(scene,wallMat,4.92,2.5,-1,.2,5,10);
+ panel(scene,wallMat,0,4.98,-1,10,.18,10);
+ for(let i=-4;i<=4;i+=1){panel(scene,trim,i,-.005,-.7,.035,.015,10);panel(scene,trim,i,4.87,-.7,.09,.16,10)}
+ for(let i=-5;i<=3;i+=1.25){panel(scene,brass,0,.008,i,10,.01,.02)}
+ for(const x of [-4.55,4.55]){for(const z of [-5,-2,1,4]){panel(scene,trim,x,3.6,z,.15,2.7,.16);panel(scene,glow,x*.985,4.55,z,.035,.04,.9)}}
+ for(let i=0;i<5;i++){panel(scene,glow,-3.4+i*1.7,4.72,-3.7,.83,.045,.18)}
+ // Observation glass looking over a blue planet and starfield.
+ panel(scene,brass,-2.8,2.75,-5.78,3.95,3.45,.16);
+ panel(scene,glass,-2.8,2.75,-5.65,3.65,3.17,.11);
+ const planet=new THREE.Mesh(new THREE.SphereGeometry(1,40,24),new THREE.MeshStandardMaterial({color:'#376c95',emissive:'#143958',emissiveIntensity:.28,roughness:.8}));
+ planet.scale.set(2.5,2.5,.33);planet.position.set(-3.1,.75,-5.51);scene.add(planet);
+ const clouds=S('#9cc3c8',.85);
+ for(let i=0;i<18;i++){const x=-4.25+((i*43)%89)/89*3.1,y=.88+((i*23)%67)/67*.78;panel(scene,clouds,x,y,-5.1,.38,.025,.02)}
+ for(let i=0;i<80;i++){const x=-4.46+((i*31)%101)/101*3.28,y=1.4+((i*47)%97)/97*2.7;ell(scene,starMat,[x,y,-5.5],[.008+(i%4)*.009,.008+(i%4)*.009,.007],7)}
+ panel(scene,brass,-2.8,2.75,-5.44,.085,3.2,.1);
+ // Left-side lounge: cushions, throws, low reclaimed-wood table.
+ panel(scene,sofa,-3.26,.52,.3,2.95,.67,2);
+ panel(scene,sofa,-4.38,1.03,.3,.46,1.3,2.1);
+ panel(scene,sofa,-3.25,.52,1.26,2.7,.65,.35);
+ for(let i=0;i<3;i++)panel(scene,i===1?redFabric:sofa,-4.01+i*.75,.93,.4,.57,.51,.6);
+ panel(scene,redFabric,-3.25,.88,1.08,2.7,.045,.6);
+ panel(scene,wood,-1.78,.51,.9,1.48,.17,1);
+ for(const x of [-2.37,-1.18])for(const z of [.55,1.22])panel(scene,trim,x,.23,z,.14,.4,.14);
+ // Bottles and glasses on a lit bar.
+ panel(scene,wood,.7,.88,-4.35,2.12,.15,.74);
+ panel(scene,trim,.7,.48,-4.4,2.05,.85,.55);
+ for(let shelf=0;shelf<3;shelf++){panel(scene,wood,.75,1.45+shelf*.65,-5.75,2.32,.08,.38);panel(scene,glow,.75,1.41+shelf*.65,-5.55,2.15,.025,.05);
+  for(let k=0;k<6;k++){const x=-.2+k*.33;const h=.22+(k%3)*.075;const bottle=new THREE.Mesh(new THREE.CylinderGeometry(.055,.083,h,9),k%3?brass:green);bottle.position.set(x,1.54+shelf*.65+h/2,-5.52);scene.add(bottle);}}
+ // Captain's berth with dark-red bedding and warm reading lights.
+ panel(scene,trim,3.07,.78,-4.65,2.95,.54,2.17);
+ panel(scene,sofa,3.07,1.06,-4.7,2.67,.2,1.96);
+ panel(scene,redFabric,3.07,1.15,-4.37,2.54,.14,1.2);
+ panel(scene,wood,3.07,1.55,-5.77,3.05,1.25,.18);
+ for(const x of [2.36,3.65])panel(scene,sofa,x,1.19,-5.35,.85,.22,.49);
+ for(const x of [1.72,4.42]){panel(scene,brass,x,1.8,-5.67,.18,.16,.12);panel(scene,glow,x,1.8,-5.55,.11,.09,.08)}
+ // Rug and crate-table with a mug and bottle.
+ panel(scene,redFabric,.32,.017,1.5,3.15,.015,2.2);
+ panel(scene,wood,.1,.52,1.5,1.63,.74,.94);
+ panel(scene,brass,.1,.92,1.5,1.65,.06,.97);
+ const mug=new THREE.Mesh(new THREE.CylinderGeometry(.12,.11,.2,12),darkPanel);mug.position.set(-.37,1.07,1.4);scene.add(mug);
+ const bottle=new THREE.Mesh(new THREE.CylinderGeometry(.07,.1,.42,12),brass);bottle.position.set(.5,1.25,1.3);scene.add(bottle);
+ // Workstation and equipment racks on the far right.
+ panel(scene,darkPanel,4.42,.98,-1,1.13,.14,2.5);
+ panel(scene,darkPanel,4.62,1.87,-1.6,.12,1.12,1.4);
+ panel(scene,screen,4.51,2,-1.6,.09,.9,1.22);
+ for(let i=0;i<6;i++)panel(scene,screen2,4.46,1.68+i*.11,-1.6+i%2*.24,.015,.03,.24);
+ for(let i=0;i<3;i++){panel(scene,trim,4.64,.35+i*.68,-4.2,.5,.1,1.12);panel(scene,darkPanel,4.65,.52+i*.68,-4.2,.56,.26,.98)}
+ // A subtle ship insignia, rendered as a luminous red compass.
+ const insignia=new THREE.Group();insignia.position.set(3.05,3.25,-5.75);scene.add(insignia);
+ for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
+ const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
  const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,disposed=false;
  import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(!loaded||disposed)return;rig=loaded;riggedRoot=loaded.root;riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=Math.PI;scene.add(riggedRoot);root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0;
- const destinations={window:new THREE.Vector3(-2,0,-3.3),console:new THREE.Vector3(1.2,0,-3.1),chair:new THREE.Vector3(3.1,0,-.65),center:new THREE.Vector3(-.6,0,.8)};
+ const destinations={window:new THREE.Vector3(-1.6,0,-2.9),console:new THREE.Vector3(3.15,0,-1.25),chair:new THREE.Vector3(2.4,0,-2.4),center:new THREE.Vector3(-.5,0,.8)};
  const action=(name)=>{if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
