@@ -103,15 +103,15 @@ export function mountNova3D(el){
  const insignia=new THREE.Group();insignia.position.set(3.05,3.25,-5.75);scene.add(insignia);
  for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
  const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
- const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,disposed=false;
- import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(!loaded||disposed)return;rig=loaded;riggedRoot=loaded.root;riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=Math.PI;scene.add(riggedRoot);root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
+ const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigMotion=null,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
+ import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(!loaded||disposed)return;rig=loaded;riggedRoot=loaded.root;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=m.createNovaMotion(riggedRoot)}).catch(e=>console.warn('Rig motion unavailable',e));riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=Math.PI;scene.add(riggedRoot);root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0;
  const destinations={window:new THREE.Vector3(-1.6,0,-2.9),console:new THREE.Vector3(3.15,0,-1.25),chair:new THREE.Vector3(2.4,0,-2.4),center:new THREE.Vector3(-.5,0,.8)};
- const action=(name)=>{if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='lounge'){target=new THREE.Vector3(-2.7,0,.55);mode='walk';return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
+ const action=(name)=>{if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-2.7,0,.55);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
- let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
+ let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;sceneTime=t;const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
  if(rig){
   if(rig.run){if(moving){rig.run.paused=false;rig.run.enabled=true;rig.run.setEffectiveWeight(1);rig.run.setEffectiveTimeScale(.65)}else{rig.run.paused=true;rig.run.enabled=false;rig.run.setEffectiveWeight(0)}}
   if(moving)rig.mixer?.update(dt);
@@ -119,9 +119,19 @@ export function mountNova3D(el){
    if(!moving){riggedRoot.rotation.z=Math.sin(t*.65)*.012;riggedRoot.position.y=Math.sin(t*1.4)*.018}
    else{riggedRoot.rotation.z=0;riggedRoot.position.y=0}
   }
- }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode='idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
+ }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode=focusMode==='closeup'?'flirt':focusMode==='lounge'?'lounge':'idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
  if(mode==='wave'){arms[1].rotation.z=-1.15+Math.sin(t*11)*.2;if(phase>2){mode='idle';arms[1].rotation.z=0}}else arms[1].rotation.z=0;
+ if(focusedUntil&&performance.now()>focusedUntil){focusedUntil=0;focusMode='normal';if(mode==='flirt'||mode==='lounge')mode='idle'}
+ if(rigMotion)rigMotion.update(mode,t,dt,moving);
  head.rotation.z=reduced?0:Math.sin(t*.85)*.045;head.rotation.x=talk?Math.sin(t*10)*.035:0;
- if(riggedRoot){riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=root.rotation.y+Math.PI}const cameraGoal=new THREE.Vector3(root.position.x*.55,3.3,root.position.z+7.8);camera.position.lerp(cameraGoal,Math.min(1,dt*1.6));camera.lookAt(root.position.x*.8,1.65,root.position.z-.5);renderer.render(scene,camera)}clock.start();tick();
+ if(riggedRoot){riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=root.rotation.y+Math.PI}const upClose=focusMode==='closeup'&&!!focusedUntil;
+ const lounging=focusMode==='lounge'&&!!focusedUntil;
+ const cameraGoal=new THREE.Vector3(root.position.x*.72+(upClose?.17:0),upClose?2.42:lounging?2.75:3.3,root.position.z+(upClose?3.1:lounging?5.0:7.8));
+ camera.position.lerp(cameraGoal,Math.min(1,dt*(upClose?1.1:1.6)));
+ const gaze=new THREE.Vector3(root.position.x*.85,upClose?1.85:lounging?1.5:1.65,root.position.z-.25);
+ if(!camera.userData.look)camera.userData.look=gaze.clone();
+ camera.userData.look.lerp(gaze,Math.min(1,dt*2));
+ camera.lookAt(camera.userData.look);
+ renderer.render(scene,camera)}clock.start();tick();
  return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
 }
