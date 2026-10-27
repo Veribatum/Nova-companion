@@ -89,8 +89,8 @@ if(url.pathname==='/voice'&&request.method==='POST'){
  const voice={nova:'Aoede',sylvanas:'Kore',samus:'Zephyr',jenny:'Leda'}[persona];
  const style={nova:'Warm, playful, confident and affectionately teasing, with the natural pauses of a real person',sylvanas:'Elegant, assured and gently teasing',samus:'Grounded, warm and dry-humored',jenny:'Bright, witty, naturally friendly'}[persona];
  try{
-  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent';
-  const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:'Speak naturally in this style: '+style+'. Say exactly this: '+content}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}})});
+  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent';
+  const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:content,speech_metadata:{style}}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{voice}}}})});
   const output=await upstream.json();
   if(!upstream.ok)return json({error:'Neural voice request failed ('+upstream.status+'): '+(output.error?.message||'model quota or access').slice(0,160)},502);
   const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
