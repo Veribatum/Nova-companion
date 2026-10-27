@@ -112,9 +112,16 @@ export function mountNova3D(el){
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
  let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
- if(rig){if(rig.run)rig.run.paused=!moving;rig.mixer?.update(dt);if(riggedRoot){riggedRoot.position.copy(root.position);riggedRoot.rotation.y=root.rotation.y+Math.PI;}}if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode='idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
+ if(rig){
+  if(rig.run){if(moving){rig.run.paused=false;rig.run.enabled=true;rig.run.setEffectiveWeight(1);rig.run.setEffectiveTimeScale(.65)}else{rig.run.paused=true;rig.run.enabled=false;rig.run.setEffectiveWeight(0)}}
+  if(moving)rig.mixer?.update(dt);
+  if(riggedRoot){riggedRoot.position.copy(root.position);riggedRoot.rotation.y=root.rotation.y+Math.PI;
+   if(!moving){riggedRoot.rotation.z=Math.sin(t*.65)*.012;riggedRoot.position.y=Math.sin(t*1.4)*.018}
+   else{riggedRoot.rotation.z=0;riggedRoot.position.y=0}
+  }
+ }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode='idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
  if(mode==='wave'){arms[1].rotation.z=-1.15+Math.sin(t*11)*.2;if(phase>2){mode='idle';arms[1].rotation.z=0}}else arms[1].rotation.z=0;
  head.rotation.z=reduced?0:Math.sin(t*.85)*.045;head.rotation.x=talk?Math.sin(t*10)*.035:0;
- if(riggedRoot){riggedRoot.position.copy(root.position);riggedRoot.rotation.y=root.rotation.y+Math.PI}renderer.render(scene,camera)}clock.start();tick();
+ if(riggedRoot){riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=root.rotation.y+Math.PI}renderer.render(scene,camera)}clock.start();tick();
  return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
 }
