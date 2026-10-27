@@ -103,8 +103,11 @@ export function mountNova3D(el){
  const insignia=new THREE.Group();insignia.position.set(3.05,3.25,-5.75);scene.add(insignia);
  for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
  const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
- const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigMotion=null,rigWasMoving=false,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
- import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(disposed)return;if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}rig=loaded;riggedRoot=loaded.root;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=m.createNovaMotion(riggedRoot)}).catch(e=>console.warn('Rig motion unavailable',e));riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=0;if(rig.run){rig.run.enabled=true;rig.run.reset().play();rig.mixer?.setTime(Math.min(.18,rig.run.getClip().duration*.25));rig.run.paused=true}scene.add(riggedRoot);root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
+ const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigAnchor=null,rigMotion=null,rigWasMoving=false,rigFrame=0,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
+ import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(disposed)return;if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}rig=loaded;riggedRoot=loaded.root;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=m.createNovaMotion(riggedRoot)}).catch(e=>console.warn('Rig motion unavailable',e));rigAnchor=new THREE.Group();rigAnchor.position.copy(root.position);rigAnchor.rotation.y=0;
+ rigAnchor.add(riggedRoot);scene.add(rigAnchor);
+ if(rig.run){rig.run.enabled=true;rig.run.reset().play();rig.mixer?.setTime(Math.min(.08,rig.run.getClip().duration*.05));rig.run.paused=true}
+ root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
  const destinations={window:new THREE.Vector3(-1.6,0,-2.9),console:new THREE.Vector3(3.15,0,-1.25),chair:new THREE.Vector3(2.4,0,-2.4),center:new THREE.Vector3(-.5,0,.8)};
@@ -131,18 +134,38 @@ export function mountNova3D(el){
    rigWasMoving=moving;
    if(moving)rig.mixer?.update(dt);
   }
-  if(riggedRoot){riggedRoot.position.copy(root.position);riggedRoot.rotation.y=root.rotation.y;
-   if(!moving){riggedRoot.rotation.z=Math.sin(t*.65)*.012;riggedRoot.position.y=Math.sin(t*1.4)*.018}
-   else{riggedRoot.rotation.z=0;riggedRoot.position.y=0}
+  if(rigAnchor){
+   rigAnchor.position.copy(root.position);rigAnchor.rotation.y=root.rotation.y;
+   rigAnchor.rotation.z=!moving?Math.sin(t*.65)*.008:0;
+   // FBX animation includes pelvis/root translation in some Meshy rigs. Keep the
+   // visible skinned mesh within the cabin, independent of those animation coordinates.
+   if(++rigFrame%12===0){
+    try{
+     rigAnchor.updateMatrixWorld(true);
+     const bounds=new THREE.Box3().setFromObject(riggedRoot,true);
+     if(!bounds.isEmpty()){
+      const center=bounds.getCenter(new THREE.Vector3());
+      const deltaX=root.position.x-center.x,deltaZ=root.position.z-center.z;
+      const minY=bounds.min.y;
+      if(Number.isFinite(deltaX)&&Number.isFinite(deltaZ)&&Number.isFinite(minY)){
+       // Smooth correction of any animation root motion; guard against enormous FBX offsets.
+       riggedRoot.position.x+=THREE.MathUtils.clamp(deltaX,-2,2)*.6;
+       riggedRoot.position.z+=THREE.MathUtils.clamp(deltaZ,-2,2)*.6;
+       riggedRoot.position.y+=THREE.MathUtils.clamp(-minY,-2,2)*.6;
+      }
+      rigAnchor.visible=true;
+     }
+    }catch(e){console.warn('Rig bounds correction',e)}
+   }
   }
  }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode=focusMode==='closeup'?'flirt':focusMode==='lounge'?'lounge':'idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
  if(mode==='wave'){arms[1].rotation.z=-1.15+Math.sin(t*11)*.2;if(phase>2){mode='idle';arms[1].rotation.z=0}}else arms[1].rotation.z=0;
  if(focusedUntil&&performance.now()>focusedUntil){focusedUntil=0;focusMode='normal';if(mode==='flirt'||mode==='lounge')mode='idle'}
  if(rigMotion)rigMotion.update(mode,t,dt,moving);
  head.rotation.z=reduced?0:Math.sin(t*.85)*.045;head.rotation.x=talk?Math.sin(t*10)*.035:0;
- if(riggedRoot){riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=root.rotation.y}const upClose=focusMode==='closeup'&&!!focusedUntil;
+ const upClose=focusMode==='closeup'&&!!focusedUntil;
  const lounging=focusMode==='lounge'&&!!focusedUntil;
- const cameraGoal=new THREE.Vector3(root.position.x*.72+(upClose?.17:0),upClose?2.42:lounging?2.75:3.3,root.position.z+(upClose?3.1:lounging?5.0:7.8));
+ const cameraGoal=new THREE.Vector3(root.position.x*.72+(upClose?.17:0),upClose?2.35:lounging?2.55:2.85,root.position.z+(upClose?2.8:lounging?4.7:5.8));
  camera.position.lerp(cameraGoal,Math.min(1,dt*(upClose?1.1:1.6)));
  const gaze=new THREE.Vector3(root.position.x*.85,upClose?1.85:lounging?1.5:1.65,root.position.z-.25);
  if(!camera.userData.look)camera.userData.look=gaze.clone();
