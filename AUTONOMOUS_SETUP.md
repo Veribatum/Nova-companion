@@ -1,25 +1,34 @@
-# NOVA autonomous check-ins (Cloudflare)
+# Nova Companion — enabling autonomous messages and photo notifications
 
-The existing GitHub Pages client continues to talk to the **nova-companion-api** Worker. The repository alone does not deploy the Worker; paste or deploy `worker/worker.js` in Cloudflare.
+## Code status
 
-## Backend setup
+The repository contains implemented Web Push subscription, Service Worker, Cloudflare KV inbox, scheduled text generation, stored gallery photo rotation, and a GitHub Actions Worker deployment workflow. **These features are not live until Cloudflare configuration and deployment are completed.**
 
-1. In Cloudflare **Workers & Pages → KV**, create a namespace named `nova-companion-store`.
-2. Open **nova-companion-api → Settings → Bindings**. Add a KV namespace binding with variable name **NOVA_KV**, selecting that namespace.
-3. Under **Triggers**, add a Cron Trigger: `0 * * * *` (every hour, UTC). The Worker respects the 9 AM–10 PM quiet window in the America/New_York time zone and a minimum of 8 hours between check-ins. Cron scheduling is not exact delivery timing.
-4. Keep `GEMINI_API_KEY` and `NOVA_ACCESS_CODE` secret in Cloudflare settings. Never put their values in GitHub.
-5. Deploy the updated `worker/worker.js`. Open the NOVA app → Settings and enable companion check-ins. The frontend then sends this preference to `/preferences`.
+## One-time Cloudflare setup
 
-## What this implementation actually does
+1. In Cloudflare create a KV namespace named `nova-companion-store`.
+2. Bind that namespace to the existing `nova-companion-api` Worker with variable name `NOVA_KV`. In `worker/wrangler.toml`, add:
+   ```toml
+   [[kv_namespaces]]
+   binding = "NOVA_KV"
+   id = "YOUR_NAMESPACE_ID"
+   ```
+3. The Worker cron trigger is already in `worker/wrangler.toml` (hourly). It does nothing unless check-ins are enabled. The scheduler observes quiet hours and per-message spacing.
+4. Generate **one** VAPID key pair with the vetted @mmmike/web-push/vapid package. Example from a Node console inside `worker/` after npm install:
+   ```bash
+   node --input-type=module -e "import {generateVapidKeys} from '@mmmike/web-push/vapid'; console.log(await generateVapidKeys())"
+   ```
+   In Cloudflare Worker Settings, add encrypted secrets `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`, and `VAPID_SUBJECT`. VAPID_SUBJECT is a contact URI such as `mailto:your-email@example.com` using your actual address. Do not commit keys.
+5. Keep your existing `GEMINI_API_KEY` and `NOVA_ACCESS_CODE` secrets.
+6. To deploy from GitHub automatically, configure repository Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Use a restricted token scoped only to this Worker/account. The workflow `.github/workflows/deploy-worker.yml` deploys on changes to `worker/` and via manual dispatch. Alternatively, deploy locally using `cd worker && npm install && npx wrangler login && npx wrangler deploy`.
+7. On iPhone open https://veribatum.github.io/Nova-companion/ in Safari, Add to Home Screen, open the installed app, then use Settings → Enable phone notifications and approve the system permission. The browser must be able to register a service worker and the backend must provide the VAPID public key.
+8. In Settings enable check-ins. In Gallery add photographs for the private Cloudflare photo pool; use the test-send control to verify delivery. The gallery photos are stored in KV and can be selected for future messages.
 
-- `scheduled()` writes an AI-generated Nova text message to Cloudflare KV while the phone/app is closed.
-- `GET /inbox` returns saved messages to the authenticated app.
-- When the app is opened or focused, it imports new server messages into conversation history; it deduplicates by server-generated ID.
-- The server can attach a photo chosen from `nova:photos` KV metadata if this key contains an array of `{url}` entries pointing at approved hosted images under `https://veribatum.github.io/`.
-- Check-in and photo toggles are optional.
+## Accurate capabilities and limitations
 
-## NOT yet enabled
-
-**iPhone push notifications, SMS, and generation of new images are not implemented.** Cloudflare cron + KV alone cannot display a notification while the app is closed. True Web Push requires HTTPS service worker registration, notification permission, subscription storage, VAPID signing, and a push sender. A private image generation provider also needs a supported API and storage pipeline.
-
-Do not label in-app check-ins as push messages, and do not store sensitive images in a public GitHub repository unless you want anyone to be able to access them.
+- **Autonomous texts:** Gemini produces them server-side on a scheduled cron; the Worker stores them in KV. A push is sent to subscribed browsers when VAPID and subscriptions are configured.
+- **Photo messages:** chooses from existing uploaded JPEG photographs. The user can trigger a test delivery. The photos are stored in KV and returned only through access-code-protected app endpoints.
+- **New AI-generated photos:** NOT implemented. Perchance's public website is not a guaranteed unattended free image generation API.
+- **Actual SMS texts:** NOT implemented. These are web push notifications and messages in the companion app.
+- **Privacy:** treat the access code as a secret. KV-stored image data is not end-to-end encrypted. Do not add private or adult photographs to a public GitHub repository.
+- **Delivery:** push timing depends on device settings, network connectivity, browser permissions, and provider availability.
