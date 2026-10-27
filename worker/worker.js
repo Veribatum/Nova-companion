@@ -104,7 +104,7 @@ if(url.pathname==='/voice'&&request.method==='POST'){
   const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent';
   const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:content,speech_metadata:{style}}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{voice}}}})});
   const output=await upstream.json();
-  if(!upstream.ok)return json({error:'Neural voice request failed ('+upstream.status+'): '+(output.error?.message||'model quota or access').slice(0,160)},502);
+  if(!upstream.ok)return json({error:(upstream.status===429?'Gemini natural voice usage limit reached: ':'Neural voice provider '+upstream.status+': ')+(output.error?.message||'Model permission, quota, or network error').slice(0,180),code:upstream.status===429?'VOICE_QUOTA_EXCEEDED':'VOICE_PROVIDER_ERROR'},upstream.status===429?429:502);
   const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
   if(!part)return json({error:'Neural voice returned no audio'},502);
   return json({audio:part.inlineData.data,mimeType:part.inlineData.mimeType||'audio/L16;rate=24000'});
