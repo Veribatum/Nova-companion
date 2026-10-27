@@ -151,13 +151,13 @@ const messages=prior.slice(-20).filter(m=>m&&['user','model'].includes(m.role)&&
 if(!messages.length||messages[messages.length-1].role!=='user')return json({error:'A user message is required'},400);
 try{
 const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
-const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality[who]+'\n'+guard+(who==='nova'?'\\nScene direction: after your spoken reply, append one unobtrusive control token exactly in the form [[SCENE:idle]], [[SCENE:approach]], [[SCENE:flirt]], [[SCENE:lounge]], [[SCENE:window]], [[SCENE:console]], or [[SCENE:wave]]. Choose based on the emotional tone of both people and what you are saying. Flirt is a playful close-camera upper-body pose; lounge is relaxed; approach is intimate or affectionate; window and console are for ship conversation. Avoid repeating identical action too often. The token is not dialogue and must appear last.':'')}]},contents:messages,generationConfig:{maxOutputTokens:600}})});
+const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality[who]+'\n'+guard+(who==='nova'?'\nScene direction: after your spoken reply, append one unobtrusive control token exactly in the form [[SCENE:idle]], [[SCENE:approach]], [[SCENE:flirt]], [[SCENE:lounge]], [[SCENE:window]], [[SCENE:console]], or [[SCENE:wave]]. Choose based on the emotional tone of both people and what you are saying. Flirt is a playful close-camera upper-body pose; lounge is relaxed; approach is intimate or affectionate; window and console are for ship conversation. Avoid repeating identical action too often. The token is not dialogue and must appear last.':'')}]},contents:messages,generationConfig:{maxOutputTokens:600}})});
 const out=await upstream.json();
 if(!upstream.ok)return json({error:'Gemini error ('+upstream.status+'): '+(out.error?.message||'Check free tier quota and model availability').slice(0,240)},502);
 const rawReply=(out.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
-const sceneMatch=who==='nova'?rawReply.match(/\\[\\[SCENE:(idle|approach|flirt|lounge|window|console|wave)\\]\\]\\s*$/i):null;
+const sceneMatch=who==='nova'?rawReply.match(/\[\[SCENE:(idle|approach|flirt|lounge|window|console|wave)\]\]\s*$/i):null;
 const sceneAction=sceneMatch?sceneMatch[1].toLowerCase():null;
-const reply=rawReply.replace(/\\s*\\[\\[SCENE:[^\\]]+\\]\\]\\s*$/i,'').trim();
+const reply=rawReply.replace(/\s*\[\[SCENE:[^\]]+\]\]\s*$/i,'').trim();
 if(!reply)return json({error:'AI returned no text; try again'},502);
 return json({reply:reply.slice(0,1400),sceneAction});
 }catch(e){return json({error:'AI network error; try again later'},502)}
