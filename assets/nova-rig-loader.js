@@ -5,11 +5,43 @@ const DB='nova-rigged-character-v1';
 function store(){return new Promise((resolve,reject)=>{const req=indexedDB.open(DB,1);req.onupgradeneeded=()=>req.result.createObjectStore('models');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
 async function get(){const db=await store();return new Promise((resolve,reject)=>{const tx=db.transaction('models','readonly');const r=tx.objectStore('models').get('nova');r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close()})}
 async function put(value){const db=await store();return new Promise((resolve,reject)=>{const tx=db.transaction('models','readwrite');tx.objectStore('models').put(value,'nova');tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)})}
-function decodeArchive(buffer,name){const bytes=new Uint8Array(buffer);if(name.toLowerCase().endsWith('.zip')){const parts=unzipSync(bytes);const keys=Object.keys(parts);const fbx=keys.find(x=>/\.fbx$/i.test(x));const image=keys.find(x=>/\.(png|jpe?g)$/i.test(x));if(!fbx)throw Error('ZIP has no FBX model');return {fbx:parts[fbx],image:image?parts[image]:null,imageName:image||''}}return {fbx:bytes,image:null,imageName:''}}
+function decodeArchive(buffer,name){
+ const bytes=new Uint8Array(buffer);
+ if(!name.toLowerCase().endsWith('.zip'))return {fbx:bytes,maps:{}};
+ const files=unzipSync(bytes);
+ const keys=Object.keys(files);
+ const fbx=keys.find(k=>/Animation_Running_withSkin\.fbx$/i.test(k))||keys.find(k=>/\.fbx$/i.test(k));
+ if(!fbx)throw Error('ZIP has no FBX model');
+ const maps={};
+ for(const key of keys){
+  if(!/\.(png|jpe?g)$/i.test(key))continue;
+  const fileName=key.split('/').pop().toLowerCase();
+  const type=/_normal\./.test(fileName)?'normal':/_roughness\./.test(fileName)?'roughness':/_metallic\./.test(fileName)?'metallic':/_texture_\d+\./.test(fileName)?'color':null;
+  if(type&&!maps[type])maps[type]={bytes:files[key],name:key};
+ }
+ return {fbx:files[fbx],maps};
+}
+function textureFromAsset(asset,linear=false){
+ if(!asset)return null;
+ const blob=new Blob([asset.bytes],{type:/\.png$/i.test(asset.name)?'image/png':'image/jpeg'});
+ const url=URL.createObjectURL(blob),loader=new THREE.TextureLoader();
+ const tex=loader.load(url,()=>URL.revokeObjectURL(url),undefined,()=>URL.revokeObjectURL(url));
+ if(!linear)tex.colorSpace=THREE.SRGBColorSpace;
+ tex.flipY=true;
+ return tex;
+}
 function makeModel(parts){const loader=new FBXLoader();const input=parts.fbx.buffer.slice(parts.fbx.byteOffset,parts.fbx.byteOffset+parts.fbx.byteLength);const root=loader.parse(input,'');const bbox=new THREE.Box3().setFromObject(root);const size=bbox.getSize(new THREE.Vector3());const height=size.y||1;root.scale.multiplyScalar(2.95/height);root.updateMatrixWorld(true);const grounded=new THREE.Box3().setFromObject(root);root.position.y-=grounded.min.y;
-if(parts.image){const blob=new Blob([parts.image],{type:/\.png$/i.test(parts.imageName)?'image/png':'image/jpeg'});const url=URL.createObjectURL(blob);const tex=new THREE.TextureLoader().load(url,()=>URL.revokeObjectURL(url));tex.colorSpace=THREE.SRGBColorSpace;tex.flipY=true;root.traverse(obj=>{if(!obj.isMesh)return;const materials=Array.isArray(obj.material)?obj.material:[obj.material];materials.forEach(mat=>{if(mat){mat.map=tex;mat.needsUpdate=true}})})}
+const maps=parts.maps||{};
+const textures={color:textureFromAsset(maps.color),normal:textureFromAsset(maps.normal,true),roughness:textureFromAsset(maps.roughness,true),metallic:textureFromAsset(maps.metallic,true)};
+root.traverse(obj=>{if(!obj.isMesh)return;const materials=Array.isArray(obj.material)?obj.material:[obj.material];materials.forEach(mat=>{if(!mat)return;
+ if(textures.color)mat.map=textures.color;
+ if(textures.normal&&'normalMap'in mat)mat.normalMap=textures.normal;
+ if(textures.roughness&&'roughnessMap'in mat){mat.roughnessMap=textures.roughness;mat.roughness=1}
+ if(textures.metallic&&'metalnessMap'in mat){mat.metalnessMap=textures.metallic;mat.metalness=1}
+ mat.needsUpdate=true;
+ })});
 root.traverse(obj=>{if(obj.isMesh){obj.frustumCulled=false;obj.castShadow=true}});
 const clips=root.animations||[];const mixer=clips.length?new THREE.AnimationMixer(root):null;let run=null;if(mixer){run=mixer.clipAction(clips.find(x=>/run|walk/i.test(x.name))||clips[0]);run.play();run.paused=true}
 return {root,mixer,run,animations:clips.map(c=>c.name),height};}
-export async function importNovaRig(file){if(!file)throw Error('Select a ZIP or FBX');if(file.size>75000000)throw Error('Model too large (75 MB maximum)');const parts=decodeArchive(await file.arrayBuffer(),file.name);const preview=makeModel(parts);await put({fbx:parts.fbx,image:parts.image,imageName:parts.imageName});return {name:file.name,animations:preview.animations,height:preview.height}}
+export async function importNovaRig(file){if(!file)throw Error('Select a ZIP or FBX');if(file.size>75000000)throw Error('Model too large (75 MB maximum)');const parts=decodeArchive(await file.arrayBuffer(),file.name);const preview=makeModel(parts);await put({fbx:parts.fbx,maps:parts.maps});return {name:file.name,animations:preview.animations,height:preview.height,textures:Object.keys(parts.maps||{})}}
 export async function loadNovaRig(){const saved=await get();if(!saved)return null;return makeModel(saved)}
