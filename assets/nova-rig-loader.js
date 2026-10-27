@@ -84,7 +84,12 @@ async function loadBundledRig(){
  return null;
 }
 export async function loadNovaRig(){
+ // User-imported models take priority over the demo asset. Previously the
+ // bundled ZIP always won, so an uploaded model was silently never displayed.
+ try {
+  const saved=await get();
+  if(saved)return {...makeModel(saved),source:'user-upload'};
+ }catch(e){console.warn('Saved Nova rig unavailable',e)}
  if(!remoteRigPromise)remoteRigPromise=loadBundledRig();
- const bundled=await remoteRigPromise;if(bundled)return bundled;
- const saved=await get();if(!saved)return null;return makeModel(saved);
+ return await remoteRigPromise;
 }
