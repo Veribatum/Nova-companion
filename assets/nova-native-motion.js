@@ -1,59 +1,65 @@
 import * as THREE from 'https://esm.sh/three@0.170.0';
 
-// The bundled character has exactly one animation: running.
-// Derive a quiet resting pose from its OWN joint tracks rather than importing
-// incompatible skeleton rotations from another character.
-export function createNativeMotion(rig) {
-  const source=rig.run?.getClip();
-  if (!source || !rig.mixer) return {update(){},dispose(){},clips:[]};
-  const idleTracks=[];
-  const samples=32, q=new THREE.Quaternion(), sum=new THREE.Quaternion();
-  for (const track of source.tracks) {
-    if (!track.name.endsWith('.quaternion')) continue;
-    const interp=track.createInterpolant();
-    let ax=0,ay=0,az=0,aw=0;
-    let reference=null;
-    for(let i=0;i<samples;i++){
-      const v=interp.evaluate(source.duration*(i+.5)/samples);
-      q.set(v[0],v[1],v[2],v[3]).normalize();
-      if(!reference)reference=q.clone();
-      const sign=reference.dot(q)<0?-1:1;
-      ax+=q.x*sign;ay+=q.y*sign;az+=q.z*sign;aw+=q.w*sign;
-    }
-    sum.set(ax,ay,az,aw).normalize();
-    idleTracks.push(new THREE.QuaternionKeyframeTrack(track.name,[0,1],[
-      sum.x,sum.y,sum.z,sum.w,sum.x,sum.y,sum.z,sum.w
-    ]));
+// Every pose below is sampled from the character's own FBX clip. We never
+// retarget a different skeleton or rotate joints in guessed local axes.
+export function createNativeMotion(rig){
+ const clip=rig.run?.getClip(),mixer=rig.mixer,root=rig.root;
+ if(!clip||!mixer)return {update(){},dispose(){},clips:[]};
+ const run=rig.run;
+ const bones=[];
+ root.traverse(o=>{if(o.isBone)bones.push(o)});
+ const left=bones.find(b=>/(leftfoot|leftankle)$/i.test(b.name));
+ const right=bones.find(b=>/(rightfoot|rightankle)$/i.test(b.name));
+ // Find the most grounded frame in the supplied run cycle instead of
+ // freezing whichever airborne running frame the FBX exported in.
+ run.reset().play();run.setEffectiveWeight(1);
+ const candidates=[];
+ const n=64;
+ for(let i=0;i<n;i++){
+  mixer.setTime((i+.5)/n*clip.duration);
+  root.updateMatrixWorld(true);
+  const ly=left?.getWorldPosition(new THREE.Vector3()).y;
+  const ry=right?.getWorldPosition(new THREE.Vector3()).y;
+  if(ly!==undefined&&ry!==undefined)candidates.push({t:(i+.5)/n*clip.duration,ly,ry});
+ }
+ let neutralTime=clip.duration*.5;
+ if(candidates.length){
+  const minY=Math.min(...candidates.flatMap(c=>[c.ly,c.ry]));
+  candidates.sort((a,b)=>
+   (Math.abs(a.ly-b.ly)*3+Math.abs(Math.min(a.ly,b.ly)-minY))-
+   (Math.abs(b.ly-b.ry)*3+Math.abs(Math.min(b.ly,b.ry)-minY)));
+  neutralTime=candidates[0].t;
+ }
+ mixer.setTime(neutralTime);
+ const tracks=[];
+ for(const track of clip.tracks){
+  if(!track.name.endsWith('.quaternion'))continue;
+  const val=track.createInterpolant().evaluate(neutralTime);
+  if(val.length!==4)continue;
+  tracks.push(new THREE.QuaternionKeyframeTrack(track.name,[0,1],
+   [val[0],val[1],val[2],val[3],val[0],val[1],val[2],val[3]]));
+ }
+ mixer.stopAllAction();
+ if(!tracks.length)return {update(){},dispose(){},clips:[]};
+ const idleClip=new THREE.AnimationClip('Nova Grounded Idle',1,tracks);
+ const idle=mixer.clipAction(idleClip);
+ idle.reset().setEffectiveWeight(1).play();
+ let state='idle';
+ function update(moving,dt){
+  const next=moving?'move':'idle';
+  if(next!==state){
+   if(moving){
+    run.reset().setEffectiveTimeScale(.55).setEffectiveWeight(1).play();
+    run.crossFadeFrom(idle,.28,true);
+   }else{
+    idle.reset().setEffectiveWeight(1).play();
+    idle.crossFadeFrom(run,.34,true);
+   }
+   state=next;
   }
-  if(!idleTracks.length)return {update(moving,dt){
-    if(moving){if(!rig.run.isRunning())rig.run.reset().play();rig.run.setEffectiveTimeScale(.5);}
-    else rig.run.stop();
-    rig.mixer.update(dt);
-  },dispose(){rig.mixer.stopAllAction()},clips:['native run']};
-  const idleClip=new THREE.AnimationClip('Nova Relaxed Idle',1,idleTracks);
-  const idle=rig.mixer.clipAction(idleClip);
-  const run=rig.run;
-  run.stop();
-  idle.setLoop(THREE.LoopRepeat,Infinity);
-  idle.reset().setEffectiveWeight(1).play();
-  let current='idle';
-  // Native running keys remain on the native skeleton. No external retargeting.
-  function update(moving,dt){
-    const next=moving?'walk':'idle';
-    if(next!==current){
-      if(next==='walk'){
-        run.reset().setEffectiveTimeScale(.48).setEffectiveWeight(1).play();
-        run.crossFadeFrom(idle,.35,true);
-      }else{
-        idle.reset().setEffectiveWeight(1).play();
-        idle.crossFadeFrom(run,.38,true);
-      }
-      current=next;
-    }
-    rig.mixer.update(Math.min(dt,.06));
-  }
-  return {update,clips:['derived idle','native movement'],dispose(){
-    rig.mixer.stopAllAction();
-    rig.mixer.uncacheClip(idleClip);
-  }};
+  mixer.update(Math.min(.05,Math.max(0,dt)));
+ }
+ return {update,clips:['ground-contact idle','native walk cycle'],dispose(){
+  mixer.stopAllAction();mixer.uncacheClip(idleClip);
+ }};
 }
