@@ -20,14 +20,43 @@ sylvanas:'You are Sylvanas, an original fictional adult elven strategist, clever
 samus:'You are Samus, an original fictional adult tactical adventurer. Be bold, supportive, practical, and warm. Keep spoken replies concise and natural.',
 jenny:'You are Jenny, a fictional adult naval AI in an android body. Be intelligent, dryly funny, and caring. Keep spoken replies concise and natural.'
 };
+
+const storeKey='nova:messages',cfgKey='nova:settings';
+const safeSettings={enabled:false,photos:true,frequencyHours:8,quietStart:22,quietEnd:9,timezone:'America/New_York'};
+const clampSettings=x=>({...safeSettings,enabled:x?.enabled===true,photos:x?.photos!==false,frequencyHours:[4,6,8,12,24].includes(Number(x?.frequencyHours))?Number(x.frequencyHours):8});
+async function readStore(env,key,fallback){try{return JSON.parse(await env.NOVA_KV.get(key)||'null')||fallback}catch{return fallback}}
+async function writeStore(env,key,value){await env.NOVA_KV.put(key,JSON.stringify(value))}
+async function generateCheckin(env){if(!env.NOVA_KV||!env.GEMINI_API_KEY)return;
+const cfg=clampSettings(await readStore(env,cfgKey,safeSettings));if(!cfg.enabled)return;
+const hour=Number(new Intl.DateTimeFormat('en-US',{timeZone:cfg.timezone||'America/New_York',hour:'numeric',hourCycle:'h23'}).format(new Date()));
+if(hour>=cfg.quietStart||hour<cfg.quietEnd)return;
+const inbox=await readStore(env,storeKey,[]);const last=inbox[0]?.time||0;
+if(Date.now()-last<cfg.frequencyHours*3600000)return;
+const msgs=['A spontaneous, casual check-in after some time apart.','A warm message about a quiet moment aboard the Rapscallion.','A funny thought Nova wants to share with her Marine.','A flirtatious, affectionate text that sounds natural rather than automated.'];
+const seed=msgs[Math.floor(Math.random()*msgs.length)];
+let message="Hey, Marine. Thought I'd check in from the Rapscallion. How's your day going?";
+try{const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality.nova+'\\nGenerate one unsolicited TEXT MESSAGE, 1-3 short natural sentences. Do not imply you can see their location or know what happened to them today. Avoid asking repeated questions.'}]},contents:[{role:'user',parts:[{text:seed}]}],generationConfig:{maxOutputTokens:160}})});if(resp.ok){const result=await resp.json();const candidate=(result.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();if(candidate)message=candidate.slice(0,500)}}catch{}
+const photos=(await readStore(env,'nova:photos',[])).filter(p=>p&&typeof p.url==='string'&&p.url.startsWith('https://veribatum.github.io/'));
+const photo=cfg.photos&&photos.length&&Math.random()<.35?photos[Math.floor(Math.random()*photos.length)]:null;
+inbox.unshift({id:crypto.randomUUID(),time:Date.now(),who:'nova',text:message,photo:photo?.url||null});
+await writeStore(env,storeKey,inbox.slice(0,100));
+}
 export default {async fetch(request,env){
 const origin=request.headers.get('Origin');
 if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
 if(origin!==ALLOWED)return json({error:'Origin not allowed'},403);
 const url=new URL(request.url);
-if(url.pathname!='/chat'||request.method!=='POST')return json({error:'Not found'},404);
 if(!env.GEMINI_API_KEY||!env.NOVA_ACCESS_CODE)return json({error:'Worker secrets are not configured'},503);
 if(request.headers.get('X-App-Code')!==env.NOVA_ACCESS_CODE)return json({error:'Incorrect app access code'},401);
+if(url.pathname!='/chat'){
+ if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
+ if(url.pathname==='/inbox'&&request.method==='GET')return json({messages:await readStore(env,storeKey,[])});
+ if(url.pathname==='/preferences'&&request.method==='GET')return json({settings:clampSettings(await readStore(env,cfgKey,safeSettings))});
+ if(url.pathname==='/preferences'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid settings'},400)}const settings=clampSettings(body);await writeStore(env,cfgKey,settings);return json({settings})}
+ if(url.pathname==='/photos'&&request.method==='GET')return json({photos:await readStore(env,'nova:photos',[])});
+ return json({error:'Not found'},404);
+}
+if(request.method!=='POST')return json({error:'Method not allowed'},405);
 let input;try{if(Number(request.headers.get('Content-Length')||0)>24000)return json({error:'Request too large'},413);input=await request.json()}catch{return json({error:'Invalid JSON'},400)}
 const who=input.character;const prior=input.messages;if(!personality[who]||!Array.isArray(prior)||prior.length>30)return json({error:'Invalid conversation'},400);
 const messages=prior.slice(-20).filter(m=>m&&['user','model'].includes(m.role)&&typeof m.text==='string').map(m=>({role:m.role,parts:[{text:m.text.slice(0,1500)}]}));
@@ -41,4 +70,4 @@ const reply=(out.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join(''
 if(!reply)return json({error:'AI returned no text; try again'},502);
 return json({reply:reply.slice(0,1400)});
 }catch(e){return json({error:'AI network error; try again later'},502)}
-}};
+},async scheduled(event,env,ctx){ctx.waitUntil(generateCheckin(env))}};
