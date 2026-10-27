@@ -1,3 +1,4 @@
+import { sendPushNotification } from '@mmmike/web-push/send';
 // NOVA Companion: minimal Gemini proxy for Cloudflare Workers.
 // In Worker Settings > Variables and Secrets add GEMINI_API_KEY and NOVA_ACCESS_CODE as secrets.
 // Do not put those values in GitHub or your browser's JavaScript.
@@ -26,6 +27,7 @@ const safeSettings={enabled:false,photos:true,frequencyHours:8,quietStart:22,qui
 const clampSettings=x=>({...safeSettings,enabled:x?.enabled===true,photos:x?.photos!==false,frequencyHours:[4,6,8,12,24].includes(Number(x?.frequencyHours))?Number(x.frequencyHours):8});
 async function readStore(env,key,fallback){try{return JSON.parse(await env.NOVA_KV.get(key)||'null')||fallback}catch{return fallback}}
 async function writeStore(env,key,value){await env.NOVA_KV.put(key,JSON.stringify(value))}
+async function notifySubscribers(env,item){if(!env.NOVA_KV||!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT)return;const subs=await readStore(env,'nova:push_subscriptions',[]);for(const sub of subs.slice(0,10)){try{const ok=await sendPushNotification(sub,{title:'Nova sent you a message',body:item.photo?'A photo and a message are waiting for you':item.text.slice(0,120),url:'https://veribatum.github.io/Nova-companion/'},{publicKey:env.VAPID_PUBLIC_KEY,privateKey:env.VAPID_PRIVATE_KEY,subject:env.VAPID_SUBJECT});if(!ok){await writeStore(env,'nova:push_subscriptions',subs.filter(s=>s.endpoint!==sub.endpoint))}}catch(e){console.warn('Push send failed',String(e).slice(0,150))}}}
 async function generateCheckin(env){if(!env.NOVA_KV||!env.GEMINI_API_KEY)return;
 const cfg=clampSettings(await readStore(env,cfgKey,safeSettings));if(!cfg.enabled)return;
 const hour=Number(new Intl.DateTimeFormat('en-US',{timeZone:cfg.timezone||'America/New_York',hour:'numeric',hourCycle:'h23'}).format(new Date()));
@@ -38,8 +40,8 @@ let message="Hey, Marine. Thought I'd check in from the Rapscallion. How's your 
 try{const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality.nova+'\\nGenerate one unsolicited TEXT MESSAGE, 1-3 short natural sentences. Do not imply you can see their location or know what happened to them today. Avoid asking repeated questions.'}]},contents:[{role:'user',parts:[{text:seed}]}],generationConfig:{maxOutputTokens:160}})});if(resp.ok){const result=await resp.json();const candidate=(result.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();if(candidate)message=candidate.slice(0,500)}}catch{}
 const photos=(await readStore(env,'nova:photos',[])).filter(p=>p&&typeof p.url==='string'&&p.url.startsWith('https://veribatum.github.io/'));
 const photo=cfg.photos&&photos.length&&Math.random()<.35?photos[Math.floor(Math.random()*photos.length)]:null;
-inbox.unshift({id:crypto.randomUUID(),time:Date.now(),who:'nova',text:message,photo:photo?.url||null});
-await writeStore(env,storeKey,inbox.slice(0,100));
+const item={id:crypto.randomUUID(),time:Date.now(),who:'nova',text:message,photo:photo?.url||null};inbox.unshift(item);
+await writeStore(env,storeKey,inbox.slice(0,100));await notifySubscribers(env,item);
 }
 export default {async fetch(request,env){
 const origin=request.headers.get('Origin');
@@ -50,6 +52,9 @@ if(!env.GEMINI_API_KEY||!env.NOVA_ACCESS_CODE)return json({error:'Worker secrets
 if(request.headers.get('X-App-Code')!==env.NOVA_ACCESS_CODE)return json({error:'Incorrect app access code'},401);
 if(url.pathname!='/chat'){
  if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
+ if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
+ if(url.pathname==='/push/subscribe'&&request.method==='POST'){let subscription;try{subscription=await request.json()}catch{return json({error:'Invalid subscription'},400)}if(!subscription?.endpoint?.startsWith('https://')||!subscription.keys?.p256dh||!subscription.keys?.auth)return json({error:'Invalid subscription'},400);const subs=await readStore(env,'nova:push_subscriptions',[]);const arr=[...subs.filter(s=>s.endpoint!==subscription.endpoint),subscription].slice(-10);await writeStore(env,'nova:push_subscriptions',arr);return json({subscribed:true})}
+ if(url.pathname==='/push/unsubscribe'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid request'},400)}const subs=await readStore(env,'nova:push_subscriptions',[]);await writeStore(env,'nova:push_subscriptions',subs.filter(x=>x.endpoint!==body.endpoint));return json({subscribed:false})}
  if(url.pathname==='/inbox'&&request.method==='GET')return json({messages:await readStore(env,storeKey,[])});
  if(url.pathname==='/preferences'&&request.method==='GET')return json({settings:clampSettings(await readStore(env,cfgKey,safeSettings))});
  if(url.pathname==='/preferences'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid settings'},400)}const settings=clampSettings(body);await writeStore(env,cfgKey,settings);return json({settings})}
