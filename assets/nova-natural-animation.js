@@ -17,12 +17,15 @@ export async function attachNaturalAnimations(nova){
  const sources=new Map(sourceBones.map(b=>[normalized(b.name),b.name]));
  for(const bone of targetBones){const name=sources.get(normalized(bone.name));if(name)names[bone.name]=name}
  if(Object.keys(names).length<12)throw Error('Animation rig is not compatible');
- const mixer=new THREE.AnimationMixer(target);
+ // Retargeted clips bind to .bones[name]; the mixer root MUST be the skinned mesh.
+ const mixer=new THREE.AnimationMixer(targetMesh);
  const actions={};let count=0;
  for(const clip of gltf.animations){
   if(!/^(idle|walk|run)$/i.test(clip.name))continue;
   try{
-   const retargeted=retargetClip(targetMesh,sourceMesh,clip,{names,hip:sourceBones.find(b=>/hips$/i.test(b.name))?.name||'mixamorigHips',preserveBonePositions:true,useFirstFramePosition:false,fps:30});
+   const retargeted=retargetClip(targetMesh,sourceMesh,clip,{names,hip:sourceBones.find(b=>/hips$/i.test(b.name))?.name||'mixamorigHips',preserveBonePositions:true,useFirstFramePosition:true,hipInfluence:new THREE.Vector3(0,0,0),fps:24});
+   // Never let imported source hip translations move Nova outside the cabin.
+   retargeted.tracks=retargeted.tracks.filter(t=>!t.name.endsWith('.position'));
    retargeted.name=clip.name.toLowerCase();
    if(retargeted.tracks.length<12)continue;
    const act=mixer.clipAction(retargeted);act.enabled=true;act.setEffectiveWeight(0);act.play();actions[retargeted.name]=act;count++;
@@ -41,5 +44,5 @@ export async function attachNaturalAnimations(nova){
   }
   mixer.update(frame);
  }
- return {update,clips:Object.keys(actions),dispose(){mixer.stopAllAction();mixer.uncacheRoot(target)}};
+ return {update,clips:Object.keys(actions),dispose(){mixer.stopAllAction();mixer.uncacheRoot(targetMesh)}};
 }
