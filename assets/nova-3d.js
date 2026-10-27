@@ -116,23 +116,15 @@ export function mountNova3D(el){
  // Small additive movements only, relative to the character's own bone rest rotations.
  try {const motion=await import('./nova-motion.js');if(!disposed)rigMotion=motion.createNovaMotion(riggedRoot)}
  catch(e){console.warn('Nova motion fallback unavailable',e)}
- // Retarget the Three.js example humanoid clips. Never assume retargeting always succeeds.
- try{
-  const natural=await import('./nova-natural-animation.js');
-  const controller=await natural.attachNaturalAnimations(loaded);
-  if(disposed){controller.dispose();return}
-  naturalMotion=controller;
-  el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:controller.clips}}));
- }catch(e){
-  console.warn('Natural animation unavailable, retaining native walk and safe idle:',e);
-  el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['native walk','rest pose','subtle idle']}}));
- }
+ // Disable cross-skeleton animation retargeting: it deforms this mesh.
+ // Use its original animation and rest pose until a compatible asset is available.
+ el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['native movement','rest pose']}}));
  el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}));
 }).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
  const destinations={window:new THREE.Vector3(-1.6,0,-2.6),console:new THREE.Vector3(1.5,0,-2.1),chair:new THREE.Vector3(1.65,0,-.6),center:new THREE.Vector3(-.35,0,-.45)};
- const action=(name)=>{if(['wave','talk','flirt'].includes(name))naturalMotion?.gesture?.(name);if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-1.45,0,-.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
+ const action=(name)=>{if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-1.45,0,-.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
  let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;sceneTime=t;
@@ -141,10 +133,7 @@ export function mountNova3D(el){
  if(rig){
   // A single controller owns the skeleton at a time. The fallback only uses
   // the model's own authored clip; gestures never overwrite retargeted poses.
-  if(naturalMotion){
-   if(rig.run&&rigWasMoving)rig.run.stop();
-   naturalMotion.update(moving?'walk':'idle',dt);
-  }else if(rig.run){
+  if(rig.run){
    if(moving){
     if(!rigWasMoving){rig.run.reset().play()}
     rig.run.paused=false;rig.run.setEffectiveWeight(1);
