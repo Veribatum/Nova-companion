@@ -89,6 +89,12 @@ if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV bi
  if(url.pathname==='/preferences'&&request.method==='GET')return json({settings:clampSettings(await readStore(env,cfgKey,safeSettings))});
  if(url.pathname==='/preferences'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid settings'},400)}const settings=clampSettings(body);await writeStore(env,cfgKey,settings);return json({settings})}
  if(url.pathname==='/photos'&&request.method==='GET')return json({photos:await readStore(env,'nova:photo_index',[])});
+ if(url.pathname==='/photos/item'&&request.method==='GET'){
+ const id=url.searchParams.get('id')||'';
+ if(!/^[a-zA-Z0-9-]{16,80}$/.test(id))return json({error:'Invalid photo id'},400);
+ const photo=await env.NOVA_KV.get('nova:photo:'+id);
+ return photo?json({id,photo}):json({error:'Photo not found'},404);
+}
  if(url.pathname==='/photos'&&request.method==='POST'){
   let body;try{body=await request.json()}catch{return json({error:'Invalid photo'},400)}
   if(typeof body?.data!=='string'||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(body.data)||body.data.length>650000)return json({error:'JPEG photo exceeds 450 KB: app should resize before upload'},413);
