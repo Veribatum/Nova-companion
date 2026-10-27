@@ -11,6 +11,25 @@ function tapered(p,m,x,y,z,top,bottom,height,depth=1){
  const mesh=new THREE.Mesh(new THREE.CylinderGeometry(top,bottom,height,24,1),m);
  mesh.position.set(x,y,z);mesh.scale.z=depth;p.add(mesh);return mesh;
 }
+// Smooth elliptical tapered anatomy, with curved silhouette and no visible ball joints.
+function organic(p,m,x,y,z,levels,radial=24){
+ const verts=[],indices=[];
+ for(let i=0;i<levels.length;i++){
+  const [dy,rx,rz]=levels[i];
+  for(let j=0;j<=radial;j++){
+   const a=j/radial*Math.PI*2;
+   verts.push(Math.cos(a)*rx,dy,Math.sin(a)*rz);
+  }
+ }
+ for(let i=0;i<levels.length-1;i++)for(let j=0;j<radial;j++){
+  const a=i*(radial+1)+j,b=a+radial+1;
+  indices.push(a,b,a+1,b,b+1,a+1);
+ }
+ const g=new THREE.BufferGeometry();
+ g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+ g.setIndex(indices);g.computeVertexNormals();
+ const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);p.add(mesh);return mesh;
+}
 function joint(parent,x,y,z){const g=new THREE.Group();g.position.set(x,y,z);parent.add(g);return g}
 function segment(p,m,a,b,r1,r2){const from=new THREE.Vector3(...a),to=new THREE.Vector3(...b),d=to.clone().sub(from);
  const o=new THREE.Mesh(new THREE.CylinderGeometry(r2,r1,d.length(),12),m);o.position.copy(from.clone().add(to).multiplyScalar(.5));o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());p.add(o);return o}
@@ -18,7 +37,7 @@ export function makeNovaRebuilt(){
  const root=new THREE.Group(),body=joint(root,0,0,0);
  // Proportions designed around a grounded ~3m figure, boots at y=0.
  const pelvis=joint(body,0,1.35,0);
- sphere(pelvis,suit,0,.06,0,.44,.30,.27);
+ organic(pelvis,suit,0,0,0,[[-.23,.20,.16],[-.15,.36,.25],[0,.43,.28],[.15,.35,.245],[.26,.27,.21]]);
  tapered(body,suit,0,1.72,0,.31,.27,.64,.87); // smooth fitted waist
  tapered(body,skin,0,2.14,0,.41,.28,.39,.72);
  tapered(body,suit,0,2.29,-.09,.43,.37,.24,.55);
@@ -35,14 +54,14 @@ export function makeNovaRebuilt(){
   const hip=joint(pelvis,sign*.26,-.13,0);
   tapered(hip,skin,0,-.27,0,.195,.15,.44,.85);
   const knee=joint(hip,0,-.45,0);
-  sphere(knee,skin,0,.02,0,.145,.13,.15);
+  organic(knee,skin,0,0,0,[[-.17,.115,.13],[-.04,.145,.15],[.11,.15,.15],[.19,.10,.11]]);
   tapered(knee,skin,0,-.33,0,.145,.105,.48,.9);
   tapered(knee,suit,0,-.60,.025,.14,.135,.28,.95);
   sphere(knee,suit,0,-.78,.15,.19,.12,.32);
   sphere(hip,gold,0,-.08,.19,.23,.06,.065);
   legs.push({hip,knee,sign});
   const shoulder=joint(body,sign*.45,2.32,0);
-  sphere(shoulder,suit,sign*.045,-.07,0,.15,.15,.17);
+  organic(shoulder,suit,sign*.045,0,0,[[-.24,.12,.14],[-.17,.15,.16],[0,.175,.18],[.12,.10,.11]]);
   tapered(shoulder,skin,sign*.04,-.38,0,.135,.112,.44,.95);
   const elbow=joint(shoulder,sign*.06,-.65,0);
   tapered(elbow,skin,0,-.21,0,.112,.085,.35,.9);
@@ -51,18 +70,28 @@ export function makeNovaRebuilt(){
   arms.push({shoulder,elbow,sign});
  }
  const neck=joint(body,0,2.51,.025),head=joint(neck,0,.08,0);
- sphere(head,skin,0,.18,.025,.305,.405,.29);
- sphere(head,blush,-.25,.08,.306,.075,.038,.028);
- sphere(head,blush,.25,.08,.306,.075,.038,.028);
- sphere(head,shade,0,.078,.306,.049,.075,.052);
- sphere(head,lip,0,-.085,.297,.105,.024,.016);
- sphere(head,lip,0,-.126,.275,.073,.012,.012);
+ // Sculpted face: forehead, temples, cheeks, tapered jaw and chin form
+ // one continuous surface instead of multiple disconnected primitives.
+ organic(head,skin,0,0,.005,[
+  [-.235,.055,.09],[-.19,.16,.19],[-.10,.235,.245],
+  [.025,.285,.285],[.16,.31,.305],[.31,.295,.28],
+  [.43,.245,.235],[.53,.105,.12]
+ ]);
+ // Subtle anatomy instead of protruding button nose and cartoon eyes.
+ sphere(head,shade,0,.085,.285,.038,.078,.027);
+ sphere(head,skin,0,.032,.300,.060,.035,.048);
+ const upper=sphere(head,lip,0,-.086,.255,.105,.019,.012);
+ const lower=sphere(head,lip,0,-.111,.255,.093,.016,.012);
  for(const sign of [-1,1]){
-   sphere(head,eye,sign*.132,.215,.282,.072,.042,.024);
-   sphere(head,iris,sign*.132,.21,.303,.027,.035,.009);
-   sphere(head,pupil,sign*.132,.21,.311,.015,.024,.008);
-   sphere(head,eye,sign*.125,.224,.319,.008,.009,.006);
-   const brow=sphere(head,hairDark,sign*.14,.324,.28,.09,.018,.015);brow.rotation.z=sign*.12;
+  sphere(head,blush,sign*.205,.015,.234,.07,.027,.018);
+  sphere(head,eye,sign*.128,.191,.279,.082,.034,.012);
+  sphere(head,iris,sign*.128,.19,.29,.029,.030,.008);
+  sphere(head,pupil,sign*.128,.19,.297,.016,.021,.007);
+  sphere(head,eye,sign*.12,.202,.304,.007,.008,.004);
+  const lash=sphere(head,hairDark,sign*.128,.228,.282,.084,.009,.012);
+  lash.rotation.z=sign*.045;
+  const brow=sphere(head,hairDark,sign*.14,.296,.271,.097,.016,.012);
+  brow.rotation.z=sign*.095;
  }
  // Thick side-parted copper hair, layered locks and face-framing strands.
  sphere(head,hairDark,0,.47,-.08,.32,.25,.29);
