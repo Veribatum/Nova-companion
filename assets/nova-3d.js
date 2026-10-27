@@ -103,8 +103,8 @@ export function mountNova3D(el){
  const insignia=new THREE.Group();insignia.position.set(3.05,3.25,-5.75);scene.add(insignia);
  for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
  const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
- const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigMotion=null,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
- import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(disposed)return;if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}rig=loaded;riggedRoot=loaded.root;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=m.createNovaMotion(riggedRoot)}).catch(e=>console.warn('Rig motion unavailable',e));riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=Math.PI;scene.add(riggedRoot);root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
+ const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigMotion=null,rigWasMoving=false,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
+ import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(disposed)return;if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}rig=loaded;riggedRoot=loaded.root;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=m.createNovaMotion(riggedRoot)}).catch(e=>console.warn('Rig motion unavailable',e));riggedRoot.position.x=root.position.x;riggedRoot.position.z=root.position.z;riggedRoot.rotation.y=Math.PI;riggedRoot.traverse(o=>{if(o.isSkinnedMesh)o.skeleton?.pose()});if(rig.run)rig.run.stop();scene.add(riggedRoot);root.visible=false;el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0;
  const destinations={window:new THREE.Vector3(-1.6,0,-2.9),console:new THREE.Vector3(3.15,0,-1.25),chair:new THREE.Vector3(2.4,0,-2.4),center:new THREE.Vector3(-.5,0,.8)};
@@ -113,8 +113,12 @@ export function mountNova3D(el){
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
  let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;sceneTime=t;const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
  if(rig){
-  if(rig.run){if(moving){rig.run.paused=false;rig.run.enabled=true;rig.run.setEffectiveWeight(1);rig.run.setEffectiveTimeScale(.65)}else{rig.run.paused=true;rig.run.enabled=false;rig.run.setEffectiveWeight(0)}}
-  if(moving)rig.mixer?.update(dt);
+  if(rig.run){
+   if(moving&&!rigWasMoving){rig.run.reset();rig.run.enabled=true;rig.run.play();rig.run.setEffectiveWeight(1);rig.run.setEffectiveTimeScale(.72)}
+   if(!moving&&rigWasMoving){rig.run.stop();rig.mixer?.stopAllAction();riggedRoot.traverse(o=>{if(o.isSkinnedMesh)o.skeleton?.pose()});rigMotion=null;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=m.createNovaMotion(riggedRoot)}).catch(()=>{})}
+   rigWasMoving=moving;
+   if(moving)rig.mixer?.update(dt);
+  }
   if(riggedRoot){riggedRoot.position.copy(root.position);riggedRoot.rotation.y=root.rotation.y+Math.PI;
    if(!moving){riggedRoot.rotation.z=Math.sin(t*.65)*.012;riggedRoot.position.y=Math.sin(t*1.4)*.018}
    else{riggedRoot.rotation.z=0;riggedRoot.position.y=0}
