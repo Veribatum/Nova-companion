@@ -112,8 +112,8 @@ export function mountNova3D(el){
  el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
- const destinations={window:new THREE.Vector3(-1.6,0,-2.9),console:new THREE.Vector3(3.15,0,-1.25),chair:new THREE.Vector3(2.4,0,-2.4),center:new THREE.Vector3(-.5,0,.8)};
- const action=(name)=>{if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-2.7,0,.55);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
+ const destinations={window:new THREE.Vector3(-1.6,0,-2.6),console:new THREE.Vector3(1.5,0,-2.1),chair:new THREE.Vector3(1.65,0,-.6),center:new THREE.Vector3(-.35,0,-.45)};
+ const action=(name)=>{if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-1.45,0,-.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
  let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;sceneTime=t;
@@ -137,39 +137,26 @@ export function mountNova3D(el){
    if(moving)rig.mixer?.update(dt);
   }
   if(rigAnchor){
-   rigAnchor.position.copy(root.position);rigAnchor.rotation.y=root.rotation.y;
-   rigAnchor.rotation.z=!moving?Math.sin(t*.65)*.008:0;
-   // FBX animation includes pelvis/root translation in some Meshy rigs. Keep the
-   // visible skinned mesh within the cabin, independent of those animation coordinates.
-   if(++rigFrame%12===0){
-    try{
-     rigAnchor.updateMatrixWorld(true);
-     const bounds=new THREE.Box3().setFromObject(riggedRoot,true);
-     if(!bounds.isEmpty()){
-      const center=bounds.getCenter(new THREE.Vector3());
-      const deltaX=root.position.x-center.x,deltaZ=root.position.z-center.z;
-      const minY=bounds.min.y;
-      if(Number.isFinite(deltaX)&&Number.isFinite(deltaZ)&&Number.isFinite(minY)){
-       // Smooth correction of any animation root motion; guard against enormous FBX offsets.
-       riggedRoot.position.x+=THREE.MathUtils.clamp(deltaX,-2,2)*.6;
-       riggedRoot.position.z+=THREE.MathUtils.clamp(deltaZ,-2,2)*.6;
-       riggedRoot.position.y+=THREE.MathUtils.clamp(-minY,-2,2)*.6;
-      }
-      rigAnchor.visible=true;
-     }
-    }catch(e){console.warn('Rig bounds correction',e)}
-   }
+   // Actor translation belongs to the scene controller only.
+   // Don't re-center the skinned FBX every few frames (that caused cumulative drift).
+   rigAnchor.position.copy(root.position);
+   rigAnchor.rotation.y=root.rotation.y;
+   rigAnchor.rotation.z=0;
   }
- }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode=focusMode==='closeup'?'flirt':focusMode==='lounge'?'lounge':'idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
+ }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);
+  // Walkable aisle: stay clear of wall panels, berth, sofa and foreground table.
+  root.position.x=THREE.MathUtils.clamp(root.position.x,-1.9,1.9);
+  root.position.z=THREE.MathUtils.clamp(root.position.z,-3.05,.55);
+  root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode=focusMode==='closeup'?'flirt':focusMode==='lounge'?'lounge':'idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
  if(mode==='wave'){arms[1].rotation.z=-1.15+Math.sin(t*11)*.2;if(phase>2){mode='idle';arms[1].rotation.z=0}}else arms[1].rotation.z=0;
  if(focusedUntil&&performance.now()>focusedUntil){focusedUntil=0;focusMode='normal';if(mode==='flirt'||mode==='lounge')mode='idle'}
  if(rigMotion&&!naturalMotion)rigMotion.update(mode,t,dt,moving);
  head.rotation.z=reduced?0:Math.sin(t*.85)*.045;head.rotation.x=talk?Math.sin(t*10)*.035:0;
  const upClose=focusMode==='closeup'&&!!focusedUntil;
  const lounging=focusMode==='lounge'&&!!focusedUntil;
- const cameraGoal=new THREE.Vector3(root.position.x*.72+(upClose?.17:0),upClose?2.35:lounging?2.55:2.85,root.position.z+(upClose?2.8:lounging?4.7:5.8));
+ const cameraGoal=new THREE.Vector3(root.position.x+(upClose?.17:0),upClose?2.35:lounging?2.55:2.85,root.position.z+(upClose?2.8:lounging?4.7:5.8));
  camera.position.lerp(cameraGoal,Math.min(1,dt*(upClose?1.1:1.6)));
- const gaze=new THREE.Vector3(root.position.x*.85,upClose?1.85:lounging?1.5:1.65,root.position.z-.25);
+ const gaze=new THREE.Vector3(root.position.x,upClose?1.85:lounging?1.5:1.65,root.position.z-.25);
  if(!camera.userData.look)camera.userData.look=gaze.clone();
  camera.userData.look.lerp(gaze,Math.min(1,dt*2));
  camera.lookAt(camera.userData.look);
