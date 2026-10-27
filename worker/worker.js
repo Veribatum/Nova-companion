@@ -81,6 +81,22 @@ if(url.pathname!='/chat'){
  if(!match)return json({error:'Unsupported image format'},400);
  try{const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:'Describe the visible scene and clothing in this image accurately in 1-2 sentences. Avoid guessing or invented context. If unable to analyze say so.'},{inlineData:{mimeType:'image/'+match[1],data:match[2]}}]}],generationConfig:{maxOutputTokens:180}})});const answer=await upstream.json();if(!upstream.ok)return json({error:'Visual analysis unavailable ('+upstream.status+')'},502);const description=(answer.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();return description?json({description:description.slice(0,500)}):json({error:'No visual description returned'},502)}catch{return json({error:'Visual analysis failed'},502)}
 }
+if(url.pathname==='/voice'&&request.method==='POST'){
+ let input;try{input=await request.json()}catch{return json({error:'Invalid speech request'},400)}
+ const content=typeof input?.text==='string'?input.text.trim().slice(0,1000):'';
+ if(!content)return json({error:'Missing speech text'},400);
+ const persona=['nova','sylvanas','samus','jenny'].includes(input.character)?input.character:'nova';
+ const voice={nova:'Aoede',sylvanas:'Kore',samus:'Zephyr',jenny:'Leda'}[persona];
+ const style={nova:'Warm, playful, confident adult woman, charming conversational rhythm, relaxed pauses, affectionate and mischievous, not theatrical',sylvanas:'Elegant, calm, teasing and confident',samus:'Grounded, warm and dry-humored',jenny:'Bright, witty, friendly, natural'}[persona];
+ try{
+  const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:content,speech_metadata:{style}}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{voice}}}})});
+  const output=await upstream.json();
+  if(!upstream.ok)return json({error:'Gemini voice unavailable ('+upstream.status+'): '+(output.error?.message||'voice quota or model access').slice(0,150)},502);
+  const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
+  if(!part)return json({error:'No audio returned'},502);
+  return json({audio:part.inlineData.data,mimeType:'audio/wav'});
+ }catch(e){return json({error:'Voice connection failed'},502)}
+}
 if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
  if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
  if(url.pathname==='/push/subscribe'&&request.method==='POST'){let subscription;try{subscription=await request.json()}catch{return json({error:'Invalid subscription'},400)}if(!subscription?.endpoint?.startsWith('https://')||!subscription.keys?.p256dh||!subscription.keys?.auth)return json({error:'Invalid subscription'},400);const subs=await readStore(env,'nova:push_subscriptions',[]);const arr=[...subs.filter(s=>s.endpoint!==subscription.endpoint),subscription].slice(-10);await writeStore(env,'nova:push_subscriptions',arr);return json({subscribed:true})}
