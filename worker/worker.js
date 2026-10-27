@@ -74,7 +74,14 @@ if(url.pathname!='/chat'){
   }catch(e){return json({error:'Image generation request failed'},502)}
  }
  
- if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
+ if(url.pathname==='/photos/describe'&&request.method==='POST'){
+ let input;try{input=await request.json()}catch{return json({error:'Invalid image'},400)}
+ if(typeof input?.photo!=='string'||input.photo.length>1800000)return json({error:'Image too large for visual analysis'},413);
+ const match=/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(input.photo);
+ if(!match)return json({error:'Unsupported image format'},400);
+ try{const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:'Describe the visible scene and clothing in this image accurately in 1-2 sentences. Avoid guessing or invented context. If unable to analyze say so.'},{inlineData:{mimeType:'image/'+match[1],data:match[2]}}]}],generationConfig:{maxOutputTokens:180}})});const answer=await upstream.json();if(!upstream.ok)return json({error:'Visual analysis unavailable ('+upstream.status+')'},502);const description=(answer.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();return description?json({description:description.slice(0,500)}):json({error:'No visual description returned'},502)}catch{return json({error:'Visual analysis failed'},502)}
+}
+if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
  if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
  if(url.pathname==='/push/subscribe'&&request.method==='POST'){let subscription;try{subscription=await request.json()}catch{return json({error:'Invalid subscription'},400)}if(!subscription?.endpoint?.startsWith('https://')||!subscription.keys?.p256dh||!subscription.keys?.auth)return json({error:'Invalid subscription'},400);const subs=await readStore(env,'nova:push_subscriptions',[]);const arr=[...subs.filter(s=>s.endpoint!==subscription.endpoint),subscription].slice(-10);await writeStore(env,'nova:push_subscriptions',arr);return json({subscribed:true})}
  if(url.pathname==='/push/unsubscribe'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid request'},400)}const subs=await readStore(env,'nova:push_subscriptions',[]);await writeStore(env,'nova:push_subscriptions',subs.filter(x=>x.endpoint!==body.endpoint));return json({subscribed:false})}
@@ -104,7 +111,7 @@ if(url.pathname!='/chat'){
 if(request.method!=='POST')return json({error:'Method not allowed'},405);
 let input;try{if(Number(request.headers.get('Content-Length')||0)>24000)return json({error:'Request too large'},413);input=await request.json()}catch{return json({error:'Invalid JSON'},400)}
 const who=input.character;const prior=input.messages;if(!personality[who]||!Array.isArray(prior)||prior.length>30)return json({error:'Invalid conversation'},400);
-const guard='You cannot send images through plain text. Never narrate, pretend, or claim a photograph has been delivered unless the app actually attached an image. If the user asks for an image and there is no image attachment, state plainly that the image was not sent.';
+const guard='Remain in character as Nova, an adult human captain aboard the Rapscallion. Do not refer to yourself as digital, code, a text-based presence, an AI, or a chatbot unless the user explicitly asks about technology. You cannot send images through plain text. Never narrate, pretend, or claim a photograph has been delivered unless the app actually attached an image. If the user asks for an image and there is no image attachment, state plainly that the image was not sent.';
 const messages=prior.slice(-20).filter(m=>m&&['user','model'].includes(m.role)&&typeof m.text==='string').map(m=>({role:m.role,parts:[{text:m.text.slice(0,1500)}]}));
 if(!messages.length||messages[messages.length-1].role!=='user')return json({error:'A user message is required'},400);
 try{
