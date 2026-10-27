@@ -1,0 +1,18 @@
+{
+  "name": "NOVA Companion",
+  "short_name": "NOVA",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#100c18",
+  "theme_color": "#100c18",
+  "description": "Private voice and companion app",
+  "icons": [
+    {
+      "src": "./assets/nova-captain.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
