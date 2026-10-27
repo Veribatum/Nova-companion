@@ -52,23 +52,6 @@ const url=new URL(request.url);
 if(!env.GEMINI_API_KEY||!env.NOVA_ACCESS_CODE)return json({error:'Worker secrets are not configured'},503);
 if(request.headers.get('X-App-Code')!==env.NOVA_ACCESS_CODE)return json({error:'Incorrect app access code'},401);
 if(url.pathname!='/chat'){
- if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
- if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
- if(url.pathname==='/push/subscribe'&&request.method==='POST'){let subscription;try{subscription=await request.json()}catch{return json({error:'Invalid subscription'},400)}if(!subscription?.endpoint?.startsWith('https://')||!subscription.keys?.p256dh||!subscription.keys?.auth)return json({error:'Invalid subscription'},400);const subs=await readStore(env,'nova:push_subscriptions',[]);const arr=[...subs.filter(s=>s.endpoint!==subscription.endpoint),subscription].slice(-10);await writeStore(env,'nova:push_subscriptions',arr);return json({subscribed:true})}
- if(url.pathname==='/push/unsubscribe'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid request'},400)}const subs=await readStore(env,'nova:push_subscriptions',[]);await writeStore(env,'nova:push_subscriptions',subs.filter(x=>x.endpoint!==body.endpoint));return json({subscribed:false})}
- if(url.pathname==='/inbox'&&request.method==='GET')return json({messages:await readStore(env,storeKey,[])});
- if(url.pathname==='/preferences'&&request.method==='GET')return json({settings:clampSettings(await readStore(env,cfgKey,safeSettings))});
- if(url.pathname==='/preferences'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid settings'},400)}const settings=clampSettings(body);await writeStore(env,cfgKey,settings);return json({settings})}
- if(url.pathname==='/photos'&&request.method==='GET')return json({photos:await readStore(env,'nova:photo_index',[])});
- if(url.pathname==='/photos'&&request.method==='POST'){
-  let body;try{body=await request.json()}catch{return json({error:'Invalid photo'},400)}
-  if(typeof body?.data!=='string'||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(body.data)||body.data.length>650000)return json({error:'JPEG photo exceeds 450 KB: app should resize before upload'},413);
-  const photo={id:crypto.randomUUID(),added:Date.now()};
-  await env.NOVA_KV.put('nova:photo:'+photo.id,body.data);
-  const index=await readStore(env,'nova:photo_index',[]);
-  index.unshift(photo);await writeStore(env,'nova:photo_index',index.slice(0,1000));
-  return json({uploaded:true,id:photo.id});
- }
  if(url.pathname==='/photos/generate'&&request.method==='POST'){
   if(!env.GEMINI_API_KEY)return json({error:'Image generation is not configured'},503);
   const prompts=[
@@ -86,10 +69,27 @@ if(url.pathname!='/chat'){
    const photo='data:'+part.inlineData.mimeType+';base64,'+part.inlineData.data;
    if(photo.length>6000000)return json({error:'Generated image is too large to store'},413);
    const item={id:crypto.randomUUID(),added:Date.now(),generated:true};
-   await env.NOVA_KV.put('nova:photo:'+item.id,photo);
-   const index=await readStore(env,'nova:photo_index',[]);index.unshift(item);await writeStore(env,'nova:photo_index',index.slice(0,1000));
+   if(env.NOVA_KV){await env.NOVA_KV.put('nova:photo:'+item.id,photo);const index=await readStore(env,'nova:photo_index',[]);index.unshift(item);await writeStore(env,'nova:photo_index',index.slice(0,1000));}
    return json({photo,id:item.id,generated:true});
   }catch(e){return json({error:'Image generation request failed'},502)}
+ }
+ 
+ if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
+ if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
+ if(url.pathname==='/push/subscribe'&&request.method==='POST'){let subscription;try{subscription=await request.json()}catch{return json({error:'Invalid subscription'},400)}if(!subscription?.endpoint?.startsWith('https://')||!subscription.keys?.p256dh||!subscription.keys?.auth)return json({error:'Invalid subscription'},400);const subs=await readStore(env,'nova:push_subscriptions',[]);const arr=[...subs.filter(s=>s.endpoint!==subscription.endpoint),subscription].slice(-10);await writeStore(env,'nova:push_subscriptions',arr);return json({subscribed:true})}
+ if(url.pathname==='/push/unsubscribe'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid request'},400)}const subs=await readStore(env,'nova:push_subscriptions',[]);await writeStore(env,'nova:push_subscriptions',subs.filter(x=>x.endpoint!==body.endpoint));return json({subscribed:false})}
+ if(url.pathname==='/inbox'&&request.method==='GET')return json({messages:await readStore(env,storeKey,[])});
+ if(url.pathname==='/preferences'&&request.method==='GET')return json({settings:clampSettings(await readStore(env,cfgKey,safeSettings))});
+ if(url.pathname==='/preferences'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid settings'},400)}const settings=clampSettings(body);await writeStore(env,cfgKey,settings);return json({settings})}
+ if(url.pathname==='/photos'&&request.method==='GET')return json({photos:await readStore(env,'nova:photo_index',[])});
+ if(url.pathname==='/photos'&&request.method==='POST'){
+  let body;try{body=await request.json()}catch{return json({error:'Invalid photo'},400)}
+  if(typeof body?.data!=='string'||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(body.data)||body.data.length>650000)return json({error:'JPEG photo exceeds 450 KB: app should resize before upload'},413);
+  const photo={id:crypto.randomUUID(),added:Date.now()};
+  await env.NOVA_KV.put('nova:photo:'+photo.id,body.data);
+  const index=await readStore(env,'nova:photo_index',[]);
+  index.unshift(photo);await writeStore(env,'nova:photo_index',index.slice(0,1000));
+  return json({uploaded:true,id:photo.id});
  }
  if(url.pathname==='/photos/test-message'&&request.method==='POST'){
   const index=await readStore(env,'nova:photo_index',[]);if(!index.length)return json({error:'Upload photos first'},400);
