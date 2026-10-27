@@ -1,3 +1,4 @@
+import {makeNovaRebuilt} from './nova-rebuilt.js';
 import * as THREE from 'https://esm.sh/three@0.170.0';
 const S=(color,roughness=.7,metalness=0)=>new THREE.MeshStandardMaterial({color,roughness,metalness});
 const skin=S('#e5a17f'), skinShade=S('#c98570'), hair=S('#ac3c25'), hairLight=S('#e97838'), armor=S('#191b28',.38,.18), armor2=S('#38303b',.48,.14), red=S('#a83b40',.42,.2), silver=S('#a9a8b2',.3,.75),green=S('#6eaa7c',.18),white=S('#fff0df'),dark=S('#291d26'),lip=S('#a7575a'),black=S('#121521');
@@ -103,32 +104,14 @@ export function mountNova3D(el){
  const insignia=new THREE.Group();insignia.position.set(3.05,3.25,-5.75);scene.add(insignia);
  for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
  const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
- const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigAnchor=null,rigMotion=null,naturalMotion=null,rigWasMoving=false,rigFrame=0,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
- import('./nova-rig-loader.js').then(async m=>{
- const loaded=await m.loadNovaRig();
- if(disposed)return;
- if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}
- rig=loaded;riggedRoot=loaded.root;
- rigAnchor=new THREE.Group();rigAnchor.position.copy(root.position);
- rigAnchor.add(riggedRoot);scene.add(rigAnchor);root.visible=false;
- // Drive the character's skeleton with its own animation data only.
- if(rig.run){rig.run.stop();rig.mixer?.stopAllAction();}
- try {
-   const motion=await import('./nova-native-motion.js');
-   if(disposed)return;
-   rigMotion=motion.createNativeMotion(rig);
- }catch(e){console.warn('Nova native animation initialization failed',e)}
-
- catch(e){console.warn('Nova motion fallback unavailable',e)}
- // Disable cross-skeleton animation retargeting: it deforms this mesh.
- // Use its original animation and rest pose until a compatible asset is available.
- el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['native movement','rest pose']}}));
- el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}));
-}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
+ const nova=makeNovaRebuilt();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigAnchor=null,rigMotion=null,naturalMotion=null,rigWasMoving=false,rigFrame=0,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
+ // Nova Mk II is procedural. There is deliberately no rig loader or FBX.
+ el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['idle','walk','wave','talk','flirt']}}));
+ el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:['idle','walk','wave','talk','flirt']}}));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
  const destinations={window:new THREE.Vector3(-1.6,0,-2.6),console:new THREE.Vector3(1.5,0,-2.1),chair:new THREE.Vector3(1.65,0,-.6),center:new THREE.Vector3(-.35,0,-.45)};
- const action=(name)=>{if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-1.45,0,-.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
+ const action=(name)=>{nova.action(name);if(name==='flirt'||name==='closeup'){target=destinations.center.clone();mode='walk';focusMode='closeup';focusedUntil=performance.now()+10500;return}if(name==='lounge'){target=new THREE.Vector3(-1.45,0,-.25);mode='walk';focusMode='lounge';focusedUntil=performance.now()+13000;return}if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
  const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
  const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
  let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;sceneTime=t;
@@ -154,6 +137,7 @@ export function mountNova3D(el){
  if(focusedUntil&&performance.now()>focusedUntil){focusedUntil=0;focusMode='normal';if(mode==='flirt'||mode==='lounge')mode='idle'}
  // Imported Mixamo poses already own the skeleton; do not layer incompatible bone rotations.
  head.rotation.z=reduced?0:Math.sin(t*.85)*.045;head.rotation.x=talk?Math.sin(t*10)*.035:0;
+ nova.update({t,dt,moving,talking:talk,mode,reduced});
  const upClose=focusMode==='closeup'&&!!focusedUntil;
  const lounging=focusMode==='lounge'&&!!focusedUntil;
  const cameraGoal=new THREE.Vector3(root.position.x+(upClose?.17:0),upClose?2.35:lounging?2.55:2.85,root.position.z+(upClose?2.8:lounging?4.7:5.8));
@@ -163,5 +147,5 @@ export function mountNova3D(el){
  camera.userData.look.lerp(gaze,Math.min(1,dt*2));
  camera.lookAt(camera.userData.look);
  renderer.render(scene,camera)}clock.start();tick();
- return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;rigMotion?.dispose?.();naturalMotion?.dispose();cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
+ return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
 }
