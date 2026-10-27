@@ -30,7 +30,7 @@ export function makeNovaRebuilt(){
  for(const sign of [-1,1]){
   const hip=joint(pelvis,sign*.26,-.13,0);
   sphere(hip,skin,0,-.30,0,.235,.44,.235);
-  const knee=joint(hip,0,-.76,0);
+  const knee=joint(hip,0,-.45,0);
   sphere(knee,skin,0,.02,0,.19,.20,.195);
   sphere(knee,skin,0,-.34,0,.17,.39,.18);
   sphere(knee,suit,0,-.59,.04,.185,.31,.19);
