@@ -7,7 +7,15 @@ function cylinder(parent,mat,a,b,r1,r2){let v1=new THREE.Vector3(...a),v2=new TH
 function makeNova(){const root=new THREE.Group(),body=new THREE.Group();root.add(body);
  // Tactical boots and armor legs
  for(const sign of [-1,1]){ell(body,armor,[sign*.28,.72,0],[.22,.63,.23]);ell(body,red,[sign*.28,.8,.17],[.21,.23,.075]);ell(body,black,[sign*.28,.2,.12],[.21,.28,.28]);ell(body,armor2,[sign*.28,.11,.3],[.22,.13,.38]);cylinder(body,silver,[sign*.28,.5,.22],[sign*.28,.59,.22],.22,.22)}
- ell(body,armor,[0,1.7,0],[.49,.71,.29]);ell(body,armor2,[0,1.52,.09],[.43,.38,.29]);ell(body,red,[-.25,1.72,.245],[.19,.35,.07]);ell(body,red,[.25,1.72,.245],[.19,.35,.07]);ell(body,armor,[0,2.02,.02],[.48,.38,.29]);ell(body,skin,[0,2.23,.05],[.19,.26,.18]);ell(body,armor2,[0,1.29,.27],[.5,.12,.1]);box(body,silver,[0,1.29,.365],[.17,.12,.05]);ell(body,silver,[0,1.72,.355],[.05,.07,.025]);
+ ell(body,armor,[0,1.7,0],[.49,.71,.29]);ell(body,armor2,[0,1.52,.09],[.43,.38,.29]);// Prominent sculpted bust, fitted armor cups and red seam detailing.
+ for(const sign of [-1,1]){
+   ell(body,armor2,[sign*.235,1.87,.235],[.285,.295,.34],32);
+   ell(body,red,[sign*.236,1.82,.535],[.235,.205,.075],28);
+   const trim=ell(body,silver,[sign*.236,1.67,.44],[.225,.025,.08],24);trim.rotation.z=sign*.15;
+   ell(body,black,[sign*.232,1.99,.485],[.24,.028,.068],24);
+ }
+ ell(body,skin,[0,2.135,.22],[.115,.12,.075],24);
+ell(body,armor,[0,2.02,.02],[.48,.38,.29]);ell(body,skin,[0,2.23,.05],[.19,.26,.18]);ell(body,armor2,[0,1.29,.27],[.5,.12,.1]);box(body,silver,[0,1.29,.365],[.17,.12,.05]);ell(body,silver,[0,1.72,.355],[.05,.07,.025]);
  const arms=[];for(const sign of [-1,1]){const a=new THREE.Group();a.position.set(sign*.48,2.14,0);body.add(a);ell(a,armor2,[sign*.08,-.1,0],[.25,.26,.27]);cylinder(a,skin,[sign*.12,-.25,0],[sign*.23,-.76,.07],.16,.13);ell(a,armor,[sign*.23,-.76,.075],[.17,.27,.18]);ell(a,skin,[sign*.25,-1.05,.1],[.12,.16,.13]);ell(a,red,[sign*.2,-.43,.2],[.12,.045,.05]);arms.push(a)}
  // Neck/head/face
  const head=new THREE.Group();head.position.set(0,2.42,.035);body.add(head);
@@ -24,7 +32,7 @@ function makeNova(){const root=new THREE.Group(),body=new THREE.Group();root.add
  return {root,body,head,arms}
 }
 export function mountNova3D(el){if(!el)return ()=>{};let renderer;try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});}catch(e){el.dataset.error='WebGL unavailable';return ()=>{}}renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));renderer.outputColorSpace=THREE.SRGBColorSpace;el.appendChild(renderer.domElement);
-const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(34,1,.1,40);camera.position.set(0,2.15,9.9);camera.lookAt(0,1.72,0);
+const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(34,1,.1,40);camera.position.set(0,2.18,8.4);camera.lookAt(0,1.91,0);
 scene.add(new THREE.HemisphereLight('#e1d3ff','#302130',2.05));let key=new THREE.DirectionalLight('#ffd3b3',3.1);key.position.set(-2,6,5);scene.add(key);let rim=new THREE.DirectionalLight('#aa65be',2.1);rim.position.set(3,4,-3);scene.add(rim);
 const {root,body,head,arms}=makeNova();scene.add(root);
 let rot=0,dragging=false,startX=0,oldRot=0;const down=e=>{dragging=true;startX=e.clientX;oldRot=rot;el.setPointerCapture?.(e.pointerId)};const move=e=>{if(dragging)rot=oldRot+(e.clientX-startX)*.008};const up=()=>{dragging=false};el.addEventListener('pointerdown',down);el.addEventListener('pointermove',move);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
