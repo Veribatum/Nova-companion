@@ -53,27 +53,39 @@ if(!env.GEMINI_API_KEY||!env.NOVA_ACCESS_CODE)return json({error:'Worker secrets
 if(request.headers.get('X-App-Code')!==env.NOVA_ACCESS_CODE)return json({error:'Incorrect app access code'},401);
 if(url.pathname!='/chat'){
  if(url.pathname==='/photos/generate'&&request.method==='POST'){
-  if(!env.GEMINI_API_KEY)return json({error:'Image generation is not configured'},503);
-  const prompts=[
-   'A natural candid smartphone selfie of Nova smiling in the warmly lit observation lounge of a lived-in independent sci-fi spaceship, auburn red hair, green eyes, freckles, adult woman, fitted casual black tank top, cinematic photorealistic, a real personal snapshot, no captions or logos',
-   'A candid photo of Nova, an adult red-haired freckled woman with bright green eyes in a tasteful stylish low-neck casual outfit, sitting in the captain chair of a cozy starship bridge with amber lighting, photorealistic, warm affectionate eye contact, natural smartphone photograph',
-   'An adult auburn red-haired, green-eyed, freckled sci-fi adventurer named Nova taking a relaxed everyday selfie in her spaceship quarters, tasteful fitted shirt, playful smile, high quality realistic photography, no text'
-  ];
-  try{
-   const prompt=prompts[Math.floor(Math.random()*prompts.length)];
-   const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseModalities:['IMAGE','TEXT']}})});
+ const prompts=[
+  'Photoreal candid selfie of Nova, an adult auburn red-haired woman with green eyes and freckles, smiling in the warmly lit observation lounge of the spaceship Rapscallion, fitted black tank top, cinematic candid photo, no captions',
+  'Realistic candid photograph of Nova, adult red-haired green-eyed freckled starship captain, relaxing on the bridge of the Rapscallion, confident smile, natural light, no text',
+  'Personal smartphone selfie of Nova, a playful adult red-haired freckled sci-fi adventurer in her cozy spaceship quarters, natural photography, no text'
+ ];
+ const prompt=prompts[Math.floor(Math.random()*prompts.length)];
+ try{
+  let photo=null,provider=null,providerError=null;
+  if(env.POLLINATIONS_API_KEY){
+   const model=env.POLLINATIONS_IMAGE_MODEL||'black-forest-labs/flux.1-schnell';
+   const target='https://gen.pollinations.ai/image/'+encodeURIComponent(prompt)+'?'+new URLSearchParams({model,width:'768',height:'1024',seed:String(Math.floor(Math.random()*1000000000))});
+   const response=await fetch(target,{headers:{Authorization:'Bearer '+env.POLLINATIONS_API_KEY,Accept:'image/*'}});
+   if(response.ok&&(response.headers.get('content-type')||'').startsWith('image/')){
+    const buf=await response.arrayBuffer();
+    if(buf.byteLength>4500000)return json({error:'Provider returned an oversized image'},413);
+    const bytes=new Uint8Array(buf);let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    photo='data:'+(response.headers.get('content-type')||'image/jpeg').split(';')[0]+';base64,'+btoa(binary);
+    provider='pollinations';
+   }else providerError='Pollinations rejected generation (HTTP '+response.status+'). Check its API key or Pollen balance.';
+  }
+  if(!photo&&env.GEMINI_API_KEY){
+   const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseModalities:['IMAGE','TEXT']}})});
    const payload=await upstream.json();
-   if(!upstream.ok){if(upstream.status===429)return json({error:'Google Gemini image-generation quota is exhausted for this API key. Image creation requires available quota or billing in Google AI Studio.',code:'IMAGE_QUOTA_EXCEEDED'},429);return json({error:'Image provider error ('+upstream.status+'): '+(payload.error?.message||'Check model access').slice(0,140)},502)}
-   const part=payload.candidates?.[0]?.content?.parts?.find(p=>p.inlineData?.data&&/^image\//.test(p.inlineData.mimeType||''));
-   if(!part)return json({error:'The image provider did not return an image'},502);
-   const photo='data:'+part.inlineData.mimeType+';base64,'+part.inlineData.data;
-   if(photo.length>6000000)return json({error:'Generated image is too large to store'},413);
-   const item={id:crypto.randomUUID(),added:Date.now(),generated:true};
-   if(env.NOVA_KV){await env.NOVA_KV.put('nova:photo:'+item.id,photo);const index=await readStore(env,'nova:photo_index',[]);index.unshift(item);await writeStore(env,'nova:photo_index',index.slice(0,1000));}
-   return json({photo,id:item.id,generated:true});
-  }catch(e){return json({error:'Image generation request failed'},502)}
- }
- 
+   if(upstream.ok){const part=payload.candidates?.[0]?.content?.parts?.find(p=>p.inlineData?.data&&/^image\//.test(p.inlineData.mimeType||''));if(part){photo='data:'+part.inlineData.mimeType+';base64,'+part.inlineData.data;provider='gemini'}}
+   else providerError=(providerError?providerError+' ':'')+(upstream.status===429?'Gemini image quota is unavailable.':'Gemini image error '+upstream.status+'.');
+  }
+  if(!photo)return json({error:providerError||'No image provider configured. Add POLLINATIONS_API_KEY as a Cloudflare Worker secret, or enable Google image quota.',code:'IMAGE_PROVIDER_UNAVAILABLE'},503);
+  if(photo.length>6000000)return json({error:'Generated image exceeds app storage limit'},413);
+  const item={id:crypto.randomUUID(),added:Date.now(),generated:true,provider};
+  if(env.NOVA_KV){try{await env.NOVA_KV.put('nova:photo:'+item.id,photo);const index=await readStore(env,'nova:photo_index',[]);index.unshift(item);await writeStore(env,'nova:photo_index',index.slice(0,1000))}catch(e){console.warn('Generated photo KV save failed',e)}}
+  return json({photo,id:item.id,generated:true,provider});
+ }catch(e){console.error('Image generation error',e);return json({error:'Image generation failed to connect to an image provider'},502)}
+}
  if(url.pathname==='/photos/describe'&&request.method==='POST'){
  let input;try{input=await request.json()}catch{return json({error:'Invalid image'},400)}
  if(typeof input?.photo!=='string'||input.photo.length>1800000)return json({error:'Image too large for visual analysis'},413);
