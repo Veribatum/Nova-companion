@@ -32,11 +32,14 @@ export async function attachNaturalAnimations(nova){
  let state=null;
  function update(mode,dt){
   const next=mode==='walk'?'walk':'idle';
-  if(next!==state){
-   state=next;
-   for(const [name,act] of Object.entries(actions)){act.enabled=true;act.paused=false;act.setEffectiveTimeScale(1);act.setEffectiveWeight(name===next?1:0)}
+  if(next!==state){state=next}
+  const frame=Math.min(dt,.06);
+  for(const [name,act] of Object.entries(actions)){
+   act.enabled=true;act.paused=false;act.setEffectiveTimeScale(1);
+   const target=name===state?1:0,weight=act.getEffectiveWeight();
+   act.setEffectiveWeight(THREE.MathUtils.lerp(weight,target,Math.min(1,frame*4.0)));
   }
-  mixer.update(Math.min(dt,.06));
+  mixer.update(frame);
  }
  return {update,clips:Object.keys(actions),dispose(){mixer.stopAllAction();mixer.uncacheRoot(target)}};
 }
