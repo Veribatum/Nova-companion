@@ -112,9 +112,9 @@ export function mountNova3D(el){
  rigAnchor=new THREE.Group();rigAnchor.position.copy(root.position);
  rigAnchor.add(riggedRoot);scene.add(rigAnchor);root.visible=false;
  // Start on the authored bind pose; never freeze the character halfway through a run.
- if(rig.run){rig.run.stop();rig.mixer?.update(0)}
+ if(rig.run){rig.run.stop();rig.mixer?.stopAllAction();rig.mixer?.update(0)}
  // Small additive movements only, relative to the character's own bone rest rotations.
- try {const motion=await import('./nova-motion.js');if(!disposed)rigMotion=motion.createNovaMotion(riggedRoot)}
+ try { rigMotion=null; }
  catch(e){console.warn('Nova motion fallback unavailable',e)}
  // Disable cross-skeleton animation retargeting: it deforms this mesh.
  // Use its original animation and rest pose until a compatible asset is available.
@@ -133,15 +133,12 @@ export function mountNova3D(el){
  if(rig){
   // A single controller owns the skeleton at a time. The fallback only uses
   // the model's own authored clip; gestures never overwrite retargeted poses.
-  if(rig.run){
-   if(moving){
-    if(!rigWasMoving){rig.run.reset().play()}
-    rig.run.paused=false;rig.run.setEffectiveWeight(1);
-    rig.run.setEffectiveTimeScale(.68);rig.mixer?.update(dt);
-   }else if(rigWasMoving){rig.run.stop();rig.mixer?.update(0)}
-  }
+  // This asset only contains a running clip whose transforms deform its mesh.
+  // Do not play that clip: a stable rest pose is better than a twisted model.
+  // Move the whole actor through the scene without modifying skinning bones.
+  if(rig.mixer && rigWasMoving)rig.mixer.stopAllAction();
   rigWasMoving=moving;
-  if(rigMotion&&!naturalMotion)rigMotion.update(mode,t,dt,moving);
+  
   if(rigAnchor){
    rigAnchor.position.copy(root.position);
    rigAnchor.rotation.y=root.rotation.y;
