@@ -83,19 +83,20 @@ if(url.pathname!='/chat'){
 }
 if(url.pathname==='/voice'&&request.method==='POST'){
  let input;try{input=await request.json()}catch{return json({error:'Invalid speech request'},400)}
- const content=typeof input?.text==='string'?input.text.trim().slice(0,1000):'';
+ const content=typeof input?.text==='string'?input.text.trim().slice(0,900):'';
  if(!content)return json({error:'Missing speech text'},400);
  const persona=['nova','sylvanas','samus','jenny'].includes(input.character)?input.character:'nova';
  const voice={nova:'Aoede',sylvanas:'Kore',samus:'Zephyr',jenny:'Leda'}[persona];
- const style={nova:'Warm, playful, confident adult woman, charming conversational rhythm, relaxed pauses, affectionate and mischievous, not theatrical',sylvanas:'Elegant, calm, teasing and confident',samus:'Grounded, warm and dry-humored',jenny:'Bright, witty, friendly, natural'}[persona];
+ const style={nova:'Warm, playful, confident and affectionately teasing, with the natural pauses of a real person',sylvanas:'Elegant, assured and gently teasing',samus:'Grounded, warm and dry-humored',jenny:'Bright, witty, naturally friendly'}[persona];
  try{
-  const upstream=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{role:'user',parts:[{text:content,speech_metadata:{style}}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{voice}}}})});
+  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent';
+  const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:'Speak naturally in this style: '+style+'. Say exactly this: '+content}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}}}})});
   const output=await upstream.json();
-  if(!upstream.ok)return json({error:'Gemini voice unavailable ('+upstream.status+'): '+(output.error?.message||'voice quota or model access').slice(0,150)},502);
+  if(!upstream.ok)return json({error:'Neural voice request failed ('+upstream.status+'): '+(output.error?.message||'model quota or access').slice(0,160)},502);
   const part=(output.candidates?.[0]?.content?.parts||[]).find(p=>p.inlineData?.data);
-  if(!part)return json({error:'No audio returned'},502);
-  return json({audio:part.inlineData.data,mimeType:'audio/wav'});
- }catch(e){return json({error:'Voice connection failed'},502)}
+  if(!part)return json({error:'Neural voice returned no audio'},502);
+  return json({audio:part.inlineData.data,mimeType:part.inlineData.mimeType||'audio/L16;rate=24000'});
+ }catch(e){return json({error:'Neural voice connection failed'},502)}
 }
 if(!env.NOVA_KV)return json({error:'Persistent inbox unavailable: add NOVA_KV binding in Cloudflare'},503);
  if(url.pathname==='/push/config'&&request.method==='GET')return json({publicKey:env.VAPID_PUBLIC_KEY||null,configured:!!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT)});
