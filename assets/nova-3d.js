@@ -104,15 +104,31 @@ export function mountNova3D(el){
  for(let i=0;i<4;i++){const ray=panel(insignia,red,0,0,0,.09,.75,.03);ray.rotation.z=i*Math.PI/4}
  const emblem=new THREE.Mesh(new THREE.TorusGeometry(.21,.035,8,24),red);insignia.add(emblem);
  const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);let rig=null,riggedRoot=null,rigAnchor=null,rigMotion=null,naturalMotion=null,rigWasMoving=false,rigFrame=0,disposed=false,focusMode='normal',focusedUntil=0,sceneTime=0;
- import('./nova-rig-loader.js').then(async m=>{const loaded=await m.loadNovaRig();if(disposed)return;if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}rig=loaded;riggedRoot=loaded.root;import('./nova-motion.js').then(m=>{if(!disposed)rigMotion=null}).catch(e=>console.warn('Rig motion unavailable',e));rigAnchor=new THREE.Group();rigAnchor.position.copy(root.position);rigAnchor.rotation.y=0;
- rigAnchor.add(riggedRoot);scene.add(rigAnchor);
- if(rig.run){rig.run.enabled=true;rig.run.reset().play();rig.mixer?.setTime(Math.min(.08,rig.run.getClip().duration*.05));rig.run.paused=false}
- root.visible=false;
- // Do not retarget Soldier animations onto this Meshy/Mixamo skeleton:
- // incompatible rest poses were twisting Nova's shoulders, torso and neck.
- // Use the model's own skin-compatible animation until matching clips exist.
- el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['original rig movement','neutral standing pose']}}));
- el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
+ import('./nova-rig-loader.js').then(async m=>{
+ const loaded=await m.loadNovaRig();
+ if(disposed)return;
+ if(!loaded){el.dispatchEvent(new CustomEvent('nova-rig-missing'));return}
+ rig=loaded;riggedRoot=loaded.root;
+ rigAnchor=new THREE.Group();rigAnchor.position.copy(root.position);
+ rigAnchor.add(riggedRoot);scene.add(rigAnchor);root.visible=false;
+ // Start on the authored bind pose; never freeze the character halfway through a run.
+ if(rig.run){rig.run.stop();rig.mixer?.update(0)}
+ // Small additive movements only, relative to the character's own bone rest rotations.
+ try {const motion=await import('./nova-motion.js');if(!disposed)rigMotion=motion.createNovaMotion(riggedRoot)}
+ catch(e){console.warn('Nova motion fallback unavailable',e)}
+ // Retarget the Three.js example humanoid clips. Never assume retargeting always succeeds.
+ try{
+  const natural=await import('./nova-natural-animation.js');
+  const controller=await natural.attachNaturalAnimations(loaded);
+  if(disposed){controller.dispose();return}
+  naturalMotion=controller;
+  el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:controller.clips}}));
+ }catch(e){
+  console.warn('Natural animation unavailable, retaining native walk and safe idle:',e);
+  el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['native walk','rest pose','subtle idle']}}));
+ }
+ el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}));
+}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
  const destinations={window:new THREE.Vector3(-1.6,0,-2.6),console:new THREE.Vector3(1.5,0,-2.1),chair:new THREE.Vector3(1.65,0,-.6),center:new THREE.Vector3(-.35,0,-.45)};
@@ -123,24 +139,21 @@ export function mountNova3D(el){
  if(mode==='idle'&&!focusedUntil&&t-lastIdleWander>18){lastIdleWander=t;const choices=[destinations.window,destinations.console,destinations.center];target=choices[Math.floor(t/18)%choices.length].clone();mode='walk'}
  const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
  if(rig){
-  if(rig.run){
-   // Animate with the character's own rig only. At rest return to its bind pose,
-   // rather than freezing a running frame or stretching bones via retargeting.
+  // A single controller owns the skeleton at a time. The fallback only uses
+  // the model's own authored clip; gestures never overwrite retargeted poses.
+  if(naturalMotion){
+   if(rig.run&&rigWasMoving)rig.run.stop();
+   naturalMotion.update(moving?'walk':'idle',dt);
+  }else if(rig.run){
    if(moving){
-    if(!rigWasMoving){rig.run.reset();rig.run.enabled=true;rig.run.play();}
-    rig.run.paused=false;
-    rig.run.setEffectiveWeight(1);
-    rig.run.setEffectiveTimeScale(.68);
-    rig.mixer?.update(dt);
-   }else if(rigWasMoving){
-    rig.run.stop();
-    rig.mixer?.update(0);
-   }
-   rigWasMoving=moving;
+    if(!rigWasMoving){rig.run.reset().play()}
+    rig.run.paused=false;rig.run.setEffectiveWeight(1);
+    rig.run.setEffectiveTimeScale(.68);rig.mixer?.update(dt);
+   }else if(rigWasMoving){rig.run.stop();rig.mixer?.update(0)}
   }
+  rigWasMoving=moving;
+  if(rigMotion&&!naturalMotion)rigMotion.update(mode,t,dt,moving);
   if(rigAnchor){
-   // Actor translation belongs to the scene controller only.
-   // Don't re-center the skinned FBX every few frames (that caused cumulative drift).
    rigAnchor.position.copy(root.position);
    rigAnchor.rotation.y=root.rotation.y;
    rigAnchor.rotation.z=0;
