@@ -108,7 +108,10 @@ export function mountNova3D(el){
  rigAnchor.add(riggedRoot);scene.add(rigAnchor);
  if(rig.run){rig.run.enabled=true;rig.run.reset().play();rig.mixer?.setTime(Math.min(.08,rig.run.getClip().duration*.05));rig.run.paused=false}
  root.visible=false;
- import('./nova-natural-animation.js').then(m=>m.attachNaturalAnimations(rig)).then(controller=>{if(disposed){controller.dispose();return}naturalMotion=controller;if(rig.run){rig.run.stop();rig.mixer?.stopAllAction()}rigMotion=null;el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:controller.clips}}))}).catch(e=>{console.warn('Retargeted animation unavailable, keeping original clip',e.message);el.dispatchEvent(new CustomEvent('nova-rig-animations-error',{detail:{message:e.message}}))});
+ // Do not retarget Soldier animations onto this Meshy/Mixamo skeleton:
+ // incompatible rest poses were twisting Nova's shoulders, torso and neck.
+ // Use the model's own skin-compatible animation until matching clips exist.
+ el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:['original rig movement','neutral standing pose']}}));
  el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
@@ -120,14 +123,19 @@ export function mountNova3D(el){
  if(mode==='idle'&&!focusedUntil&&t-lastIdleWander>18){lastIdleWander=t;const choices=[destinations.window,destinations.console,destinations.center];target=choices[Math.floor(t/18)%choices.length].clone();mode='walk'}
  const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
  if(rig){
-  if(naturalMotion){naturalMotion.update(mode,dt)}
-  else if(rig.run){
-   // Never pause the only animation: pausing preserved a frozen running pose.
-   rig.run.enabled=true;
-   rig.run.paused=false;
-   rig.run.setEffectiveWeight(1);
-   rig.run.setEffectiveTimeScale(moving?.68:.045);
-   rig.mixer?.update(dt);
+  if(rig.run){
+   // Animate with the character's own rig only. At rest return to its bind pose,
+   // rather than freezing a running frame or stretching bones via retargeting.
+   if(moving){
+    if(!rigWasMoving){rig.run.reset();rig.run.enabled=true;rig.run.play();}
+    rig.run.paused=false;
+    rig.run.setEffectiveWeight(1);
+    rig.run.setEffectiveTimeScale(.68);
+    rig.mixer?.update(dt);
+   }else if(rigWasMoving){
+    rig.run.stop();
+    rig.mixer?.update(0);
+   }
    rigWasMoving=moving;
   }
   if(rigAnchor){
