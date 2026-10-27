@@ -104,11 +104,12 @@ if(url.pathname!='/chat'){
 if(request.method!=='POST')return json({error:'Method not allowed'},405);
 let input;try{if(Number(request.headers.get('Content-Length')||0)>24000)return json({error:'Request too large'},413);input=await request.json()}catch{return json({error:'Invalid JSON'},400)}
 const who=input.character;const prior=input.messages;if(!personality[who]||!Array.isArray(prior)||prior.length>30)return json({error:'Invalid conversation'},400);
+const guard='You cannot send images through plain text. Never narrate, pretend, or claim a photograph has been delivered unless the app actually attached an image. If the user asks for an image and there is no image attachment, state plainly that the image was not sent.';
 const messages=prior.slice(-20).filter(m=>m&&['user','model'].includes(m.role)&&typeof m.text==='string').map(m=>({role:m.role,parts:[{text:m.text.slice(0,1500)}]}));
 if(!messages.length||messages[messages.length-1].role!=='user')return json({error:'A user message is required'},400);
 try{
 const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
-const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality[who]}]},contents:messages,generationConfig:{maxOutputTokens:600}})});
+const upstream=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality[who]+'\n'+guard}]},contents:messages,generationConfig:{maxOutputTokens:600}})});
 const out=await upstream.json();
 if(!upstream.ok)return json({error:'Gemini error ('+upstream.status+'): '+(out.error?.message||'Check free tier quota and model availability').slice(0,240)},502);
 const reply=(out.candidates?.[0]?.content?.parts||[]).map(x=>x.text||'').join('').trim();
