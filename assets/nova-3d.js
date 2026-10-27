@@ -31,11 +31,39 @@ ell(body,armor,[0,2.02,.02],[.48,.38,.29]);ell(body,skin,[0,2.23,.05],[.19,.26,.
  const badge=box(body,silver,[.23,1.98,.292],[.14,.12,.015]);badge.rotation.z=-.12;
  return {root,body,head,arms}
 }
-export function mountNova3D(el){if(!el)return ()=>{};let renderer;try{renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});}catch(e){el.dataset.error='WebGL unavailable';return ()=>{}}renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));renderer.outputColorSpace=THREE.SRGBColorSpace;el.appendChild(renderer.domElement);
-const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(34,1,.1,40);camera.position.set(0,2.18,8.4);camera.lookAt(0,1.91,0);
-scene.add(new THREE.HemisphereLight('#e1d3ff','#302130',2.05));let key=new THREE.DirectionalLight('#ffd3b3',3.1);key.position.set(-2,6,5);scene.add(key);let rim=new THREE.DirectionalLight('#aa65be',2.1);rim.position.set(3,4,-3);scene.add(rim);
-const {root,body,head,arms}=makeNova();scene.add(root);
-let rot=0,dragging=false,startX=0,oldRot=0;const down=e=>{dragging=true;startX=e.clientX;oldRot=rot;el.setPointerCapture?.(e.pointerId)};const move=e=>{if(dragging)rot=oldRot+(e.clientX-startX)*.008};const up=()=>{dragging=false};el.addEventListener('pointerdown',down);el.addEventListener('pointermove',move);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
-const resize=()=>{const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();let observer=new ResizeObserver(resize);observer.observe(el);
-let raf,alive=true;const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches,clock=new THREE.Clock();function tick(){if(!alive)return;raf=requestAnimationFrame(tick);if(!document.hidden){const t=clock.getElapsedTime();root.rotation.y=rot+(dragging?0:Math.sin(t*.24)*.07);body.position.y=reduce?0:Math.sin(t*1.6)*.018;head.rotation.z=reduce?0:Math.sin(t*.67)*.035;arms[0].rotation.z=reduce?0:Math.sin(t*.75)*.035;arms[1].rotation.z=reduce?0:-Math.sin(t*.75)*.035;renderer.render(scene,camera)}}tick();
-return ()=>{alive=false;cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',up);scene.traverse(o=>{if(o.geometry)o.geometry.dispose()});renderer.dispose();renderer.domElement.remove()}}
+export function mountNova3D(el){
+ if(!el)return {destroy(){},action(){}};
+ let renderer;try{renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power'});}catch(e){el.textContent='3D unavailable on this device';return {destroy(){},action(){}}}
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));renderer.setClearColor('#100f20');renderer.outputColorSpace=THREE.SRGBColorSpace;el.appendChild(renderer.domElement);
+ const scene=new THREE.Scene();scene.background=new THREE.Color('#111528');scene.fog=new THREE.Fog('#111528',10,21);
+ const camera=new THREE.PerspectiveCamera(49,1,.1,70);camera.position.set(0,3.1,8.7);camera.lookAt(0,1.65,-.7);
+ scene.add(new THREE.HemisphereLight('#bad5ff','#30202e',2));
+ const light=new THREE.PointLight('#ffc5a3',45,12);light.position.set(-3,4,2);scene.add(light);
+ const ambient=new THREE.PointLight('#6388ff',34,12);ambient.position.set(3,4,-3);scene.add(ambient);
+ const floorMat=S('#222733',.5,.2),wallMat=S('#1a2231',.7,.1),trim=S('#5b718f',.34,.6),glow=new THREE.MeshBasicMaterial({color:'#65cffa'}),glass=new THREE.MeshBasicMaterial({color:'#070e22'});
+ box(scene,floorMat,[0,-.15,-.8],[10,.3,11]);box(scene,wallMat,[0,2.5,-6.05],[10,5,.3]);
+ for(let i=-4;i<=4;i+=2){box(scene,trim,[i,0,-.7],[.045,.01,10]);box(scene,trim,[i,4.45,-5.85],[.06,.06,.15])}
+ for(let i=0;i<5;i++){box(scene,trim,[-4.86,2.2-i*.75,-1.25],[.09,.035,8]);box(scene,trim,[4.86,2.2-i*.75,-1.25],[.09,.035,8])}
+ box(scene,wallMat,[-4.95,2.4,-.8],[.2,5,11]);box(scene,wallMat,[4.95,2.4,-.8],[.2,5,11]);
+ // Viewport: dark starfield behind a substantial panoramic window.
+ box(scene,trim,[0,2.75,-5.82],[7.8,3.35,.12]);box(scene,glass,[0,2.75,-5.7],[7.52,3.06,.15]);
+ for(let i=0;i<90;i++){const x=(((i*97)%113)/113-.5)*7.1,y=1.4+((i*47)%97)/97*2.65;const star=ell(scene,i%8===0?S('#a0ddff'):white,[x,y,-5.57],[.012+(i%5)*.007,.012+(i%5)*.007,.012],7);star.userData.star=true}
+ for(let i=-1;i<=1;i++)box(scene,trim,[i*2.5,2.75,-5.52],[.09,3.15,.1]);
+ const screen=new THREE.MeshBasicMaterial({color:'#286b92'}),screen2=new THREE.MeshBasicMaterial({color:'#81cff0'});
+ for(let i=0;i<3;i++){const x=-3.2+i*3.2;box(scene,armor2,[x,.55,-4.55],[2.5,.85,1.2]);box(scene,screen,[x,.92,-4.5],[2.1,.065,.85]);for(let j=0;j<5;j++)box(scene,screen2,[x-.8+j*.36,.96,-4.55+j%2*.1],[.16,.01,.035])}
+ // Captain's chair and a glowing central table.
+ box(scene,armor,[3.25,.55,-1.5],[1.45,.35,1.35]);box(scene,armor2,[3.25,1.35,-1.92],[1.35,1.7,.27]);box(scene,trim,[3.25,.65,-1.4],[1.1,.08,1.05]);
+ box(scene,armor,[0,.45,-2.6],[1.5,.8,1]);box(scene,screen,[0,.88,-2.6],[1.42,.03,.92]);
+ const nova=makeNova();const {root,body,head,arms}=nova;scene.add(root);root.position.set(-1.15,0,.2);
+ let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,disposed=false;
+ const destinations={window:new THREE.Vector3(-2,0,-3.3),console:new THREE.Vector3(1.2,0,-3.1),chair:new THREE.Vector3(3.1,0,-.65),center:new THREE.Vector3(-.6,0,.8)};
+ const action=(name)=>{if(name==='talk'){talk=true;mode='talk';setTimeout(()=>{if(!disposed)talk=false},2500);return}if(name==='wave'){mode='wave';phase=0;return}if(name==='turn'){spin+=Math.PI*.75;return}if(destinations[name]){target=destinations[name].clone();mode='walk';return}mode='idle'};
+ const resize=()=>{if(disposed)return;const w=el.clientWidth||320,h=el.clientHeight||400;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()};resize();const observer=new ResizeObserver(resize);observer.observe(el);
+ const clock=new THREE.Clock(),reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches,down=e=>{el._downX=e.clientX},up=e=>{if(typeof el._downX==='number'&&Math.abs(e.clientX-el._downX)>25)spin+=(e.clientX-el._downX)*.008;el._downX=null};el.addEventListener('pointerdown',down);el.addEventListener('pointerup',up);
+ let raf;function tick(){if(disposed)return;raf=requestAnimationFrame(tick);if(document.hidden)return;const dt=Math.min(clock.getDelta(),.08);phase+=dt;const t=clock.elapsedTime;const delta=target.clone().sub(root.position),moving=mode==='walk'&&delta.length()>.08;
+ if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);root.rotation.y=Math.atan2(delta.x,delta.z);body.position.y=Math.abs(Math.sin(t*9))*.08;arms[0].rotation.x=Math.sin(t*9)*.4;arms[1].rotation.x=-Math.sin(t*9)*.4}else{if(mode==='walk')mode='idle';root.rotation.y+=(spin-root.rotation.y)*Math.min(1,dt*2);body.position.y=reduced?0:Math.sin(t*1.8)*.018;arms[0].rotation.x=0;arms[1].rotation.x=0}
+ if(mode==='wave'){arms[1].rotation.z=-1.15+Math.sin(t*11)*.2;if(phase>2){mode='idle';arms[1].rotation.z=0}}else arms[1].rotation.z=0;
+ head.rotation.z=reduced?0:Math.sin(t*.85)*.045;head.rotation.x=talk?Math.sin(t*10)*.035:0;
+ renderer.render(scene,camera)}clock.start();tick();
+ return {action,setTalking(v){talk=!!v;head.rotation.x=0},destroy(){disposed=true;cancelAnimationFrame(raf);observer.disconnect();el.removeEventListener('pointerdown',down);el.removeEventListener('pointerup',up);scene.traverse(o=>{o.geometry?.dispose()});renderer.dispose();renderer.domElement.remove()}};
+}
