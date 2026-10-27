@@ -108,7 +108,7 @@ export function mountNova3D(el){
  rigAnchor.add(riggedRoot);scene.add(rigAnchor);
  if(rig.run){rig.run.enabled=true;rig.run.reset().play();rig.mixer?.setTime(Math.min(.08,rig.run.getClip().duration*.05));rig.run.paused=true}
  root.visible=false;
- import('./nova-natural-animation.js').then(m=>m.attachNaturalAnimations(rig)).then(controller=>{if(disposed){controller.dispose();return}naturalMotion=controller;if(rig.run){rig.run.stop();rig.mixer?.stopAllAction()}rigMotion=null;el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:controller.clips}}))}).catch(e=>console.warn('Retargeted animation unavailable, keeping original clip',e.message));
+ import('./nova-natural-animation.js').then(m=>m.attachNaturalAnimations(rig)).then(controller=>{if(disposed){controller.dispose();return}naturalMotion=controller;if(rig.run){rig.run.stop();rig.mixer?.stopAllAction()}rigMotion=null;el.dispatchEvent(new CustomEvent('nova-rig-animations',{detail:{clips:controller.clips}}))}).catch(e=>{console.warn('Retargeted animation unavailable, keeping original clip',e.message);el.dispatchEvent(new CustomEvent('nova-rig-animations-error',{detail:{message:e.message}}))});
  el.dispatchEvent(new CustomEvent('nova-rig-ready',{detail:{animations:loaded.animations}}))}).catch(e=>console.warn('No rigged Nova loaded:',e.message));
 
  let mode='idle',target=root.position.clone(),phase=0,talk=false,spin=0,lastIdleWander=0;
