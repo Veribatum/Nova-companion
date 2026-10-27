@@ -3,7 +3,7 @@ import {GLTFLoader} from 'https://esm.sh/three@0.170.0/examples/jsm/loaders/GLTF
 import {retargetClip} from 'https://esm.sh/three@0.170.0/examples/jsm/utils/SkeletonUtils.js';
 // Three.js example Soldier: Mixamo humanoid and freely redistributable idle/walk clips.
 // Use source animations, not arbitrary joint angles on Nova's shoulders and elbows.
-const SOURCE='https://threejs.org/examples/models/gltf/Soldier.glb';
+const SOURCE='https://threejs.org/examples/models/gltf/Xbot.glb';
 export async function attachNaturalAnimations(nova){
  const target=nova.root;
  let targetMesh=null;target.traverse(o=>{if(o.isSkinnedMesh&&o.skeleton?.bones?.length&&!targetMesh)targetMesh=o});
@@ -21,7 +21,7 @@ export async function attachNaturalAnimations(nova){
  const mixer=new THREE.AnimationMixer(targetMesh);
  const actions={};let count=0;
  for(const clip of gltf.animations){
-  if(!/^(idle|walk|run)$/i.test(clip.name))continue;
+  if(!/^(idle|walk|run|agree|headShake)$/i.test(clip.name))continue;
   try{
    const retargeted=retargetClip(targetMesh,sourceMesh,clip,{names,hip:sourceBones.find(b=>/hips$/i.test(b.name))?.name||'mixamorigHips',preserveBonePositions:true,useFirstFramePosition:true,hipInfluence:new THREE.Vector3(0,0,0),fps:24});
    // Never let imported source hip translations move Nova outside the cabin.
@@ -32,17 +32,31 @@ export async function attachNaturalAnimations(nova){
   }catch(e){console.warn('Nova animation clip skipped',clip.name,e)}
  }
  if(!actions.idle||!actions.walk)throw Error('Could not retarget idle and walk');
+ const gestures=['agree','headshake'].filter(name=>actions[name]);
+ let gesture=null,gestureUntil=0;
+ for(const name of gestures){
+  const a=actions[name];a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;
+ }
  let state=null;
+ function gestureFor(kind){
+  const name=kind==='wave'?'agree':kind==='talk'?'agree':kind==='flirt'?'headshake':null;
+  if(!name||!actions[name])return false;
+  if(gesture&&actions[gesture])actions[gesture].fadeOut(.22);
+  gesture=name;gestureUntil=performance.now()+1600;
+  actions[name].reset().setEffectiveWeight(0).play();
+  return true;
+ }
  function update(mode,dt){
   const next=mode==='walk'?'walk':'idle';
+  if(gesture&&performance.now()>gestureUntil)gesture=null;
   if(next!==state){state=next}
   const frame=Math.min(dt,.06);
   for(const [name,act] of Object.entries(actions)){
    act.enabled=true;act.paused=false;act.setEffectiveTimeScale(1);
-   const target=name===state?1:0,weight=act.getEffectiveWeight();
+   const target=name===state?(gesture?.45:1):name===gesture?.75:0,weight=act.getEffectiveWeight();
    act.setEffectiveWeight(THREE.MathUtils.lerp(weight,target,Math.min(1,frame*4.0)));
   }
   mixer.update(frame);
  }
- return {update,clips:Object.keys(actions),dispose(){mixer.stopAllAction();mixer.uncacheRoot(targetMesh)}};
+ return {update,gesture:gestureFor,clips:Object.keys(actions),dispose(){mixer.stopAllAction();mixer.uncacheRoot(targetMesh)}};
 }
