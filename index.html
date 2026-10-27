@@ -33,7 +33,7 @@ function conversation(p){const cs=chat(p);const isNova=p.id==='nova';const src=e
 let recognition=null,busy=false;
 function voices(){return 'speechSynthesis'in window?speechSynthesis.getVoices().filter(v=>/^en(?:[-_]|$)/i.test(v.lang)):[]}
 function choiceVoice(p){const vs=voices();const chosen=data.settings.voices[p.id];const manual=vs.find(v=>v.voiceURI===chosen);if(manual)return manual;const prefs={nova:/Samantha|Ava|Zoe|Aria|Siri|Jenny|Victoria/i,sylvanas:/Serena|Samantha|Moira|Karen/i,samus:/Ava|Allison|Zira|Jenny/i,jenny:/Google US English|Siri|Samantha/i};return vs.find(v=>prefs[p.id].test(v.name)&&v.localService)||vs.find(v=>prefs[p.id].test(v.name))||vs.find(v=>v.localService)||vs[0]}
-let currentVoiceAudio=null,voiceRequestSerial=0,lastNaturalSpeech=null;
+let currentVoiceAudio=null,voiceRequestSerial=0,lastNaturalSpeech=null,neuralRetryAfter=0;
 function spokenText(text){return String(text||'').replace(/\*[^*]{1,160}\*/g,' ').replace(/\[[^\]]{1,160}\]/g,' ').replace(/\s+/g,' ').trim().slice(0,1000)}
 function pcmToWav(base64){const bin=atob(base64),bytes=new Uint8Array(44+bin.length),view=new DataView(bytes.buffer);const str=(at,v)=>{for(let i=0;i<v.length;i++)bytes[at+i]=v.charCodeAt(i)};str(0,'RIFF');view.setUint32(4,36+bin.length,true);str(8,'WAVEfmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,24000,true);view.setUint32(28,48000,true);view.setUint16(32,2,true);view.setUint16(34,16,true);str(36,'data');view.setUint32(40,bin.length,true);for(let i=0;i<bin.length;i++)bytes[i+44]=bin.charCodeAt(i);return URL.createObjectURL(new Blob([bytes],{type:'audio/wav'}))}
 function sayDevice(text,p=people[0],why=''){
@@ -51,6 +51,7 @@ function sayDevice(text,p=people[0],why=''){
  }catch(e){status('Device speech failed: '+e.message);return false}
 }
 async function sayNeural(text,p){
+ if(Date.now()<neuralRetryAfter)return sayDevice(text,p,'Gemini quota temporarily exhausted');
  if(!data.settings.endpoint||!data.settings.access){return sayDevice(text,p,'backend unavailable')}
  const serial=++voiceRequestSerial;
  status('Generating '+p.name+' natural voice…');
@@ -60,7 +61,7 @@ async function sayNeural(text,p){
    body:JSON.stringify({text,character:p.id})
   });
   const result=await response.json().catch(()=>({}));
-  if(!response.ok)throw Error(result.error||'Neural voice HTTP '+response.status);
+  if(!response.ok){if(response.status===429||result.code==='VOICE_QUOTA_EXCEEDED'||/quota|usage limit|rate.limit/i.test(result.error||''))neuralRetryAfter=Date.now()+30*60*1000;throw Error(result.error||'Neural voice HTTP '+response.status)}
   if(serial!==voiceRequestSerial)return true;
   if(!result.audio)throw Error('Voice provider returned no audio');
   // Gemini versions may return either a complete RIFF WAV or raw PCM. Detect the bytes, not just MIME.
