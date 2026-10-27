@@ -54,6 +54,15 @@ async function loadBundledRig(){
  './assets/Meshy_AI_Crimson_Rogue_biped_Animation_Running_withSkin.fbx',
  './assets/nova.zip','./assets/Nova.zip'
  ];
+ // Discover uploaded binary names from the public repository if they differ from defaults.
+ try{
+  const listing=await fetch('https://api.github.com/repos/Veribatum/Nova-companion/git/trees/main?recursive=1',{headers:{'Accept':'application/vnd.github+json'}});
+  if(listing.ok){const tree=(await listing.json()).tree||[];
+   const files=tree.filter(v=>v.type==='blob'&&/^assets\\//i.test(v.path)&&/\\.(zip|glb|fbx)$/i.test(v.path)&&/nova|crimson|meshy/i.test(v.path));
+   files.sort((a,b)=>{const score=x=>(/crimson/i.test(x.path)?10:0)+(/\\.glb$/i.test(x.path)?5:0)+(/\\.zip$/i.test(x.path)?3:0);return score(b)-score(a)});
+   for(const file of files){const path='./'+file.path.split('/').map(encodeURIComponent).join('/');if(!paths.includes(path))paths.unshift(path)}
+  }
+ }catch(e){console.warn('Optional model discovery unavailable',e)}
  for(const path of paths){
   let response;try{response=await fetch(path,{cache:'no-cache'});if(!response.ok)continue;
    const buffer=await response.arrayBuffer();
