@@ -142,8 +142,9 @@ export function mountNova3D(el){
    // Actor translation belongs to the scene controller only.
    // Don't re-center the skinned FBX every few frames (that caused cumulative drift).
    rigAnchor.position.copy(root.position);
-   rigAnchor.rotation.y=root.rotation.y+Math.PI;
+   rigAnchor.rotation.y=root.rotation.y;
    rigAnchor.rotation.z=0;
+   rigAnchor.position.y=!moving?Math.sin(t*1.7)*.012:0;
   }
  }if(moving){const step=Math.min(delta.length(),dt*1.25);root.position.addScaledVector(delta.normalize(),step);
   // Walkable aisle: stay clear of wall panels, berth, sofa and foreground table.
