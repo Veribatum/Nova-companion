@@ -38,9 +38,9 @@ const msgs=['A spontaneous, casual check-in after some time apart.','A warm mess
 const seed=msgs[Math.floor(Math.random()*msgs.length)];
 let message="Hey, Marine. Thought I'd check in from the Rapscallion. How's your day going?";
 try{const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:personality.nova+'\\nGenerate one unsolicited TEXT MESSAGE, 1-3 short natural sentences. Do not imply you can see their location or know what happened to them today. Avoid asking repeated questions.'}]},contents:[{role:'user',parts:[{text:seed}]}],generationConfig:{maxOutputTokens:160}})});if(resp.ok){const result=await resp.json();const candidate=(result.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();if(candidate)message=candidate.slice(0,500)}}catch{}
-const photos=(await readStore(env,'nova:photos',[])).filter(p=>p&&typeof p.url==='string'&&p.url.startsWith('https://veribatum.github.io/'));
+const photos=(await readStore(env,'nova:photos',[])).filter(p=>p&&typeof p.data==='string'&&p.data.startsWith('data:image/jpeg;base64,'));
 const photo=cfg.photos&&photos.length&&Math.random()<.35?photos[Math.floor(Math.random()*photos.length)]:null;
-const item={id:crypto.randomUUID(),time:Date.now(),who:'nova',text:message,photo:photo?.url||null};inbox.unshift(item);
+const item={id:crypto.randomUUID(),time:Date.now(),who:'nova',text:message,photo:photo?.data||null};inbox.unshift(item);
 await writeStore(env,storeKey,inbox.slice(0,100));await notifySubscribers(env,item);
 }
 export default {async fetch(request,env){
@@ -58,7 +58,10 @@ if(url.pathname!='/chat'){
  if(url.pathname==='/inbox'&&request.method==='GET')return json({messages:await readStore(env,storeKey,[])});
  if(url.pathname==='/preferences'&&request.method==='GET')return json({settings:clampSettings(await readStore(env,cfgKey,safeSettings))});
  if(url.pathname==='/preferences'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid settings'},400)}const settings=clampSettings(body);await writeStore(env,cfgKey,settings);return json({settings})}
- if(url.pathname==='/photos'&&request.method==='GET')return json({photos:await readStore(env,'nova:photos',[])});
+ if(url.pathname==='/photos'&&request.method==='GET')return json({photos:(await readStore(env,'nova:photos',[])).map(p=>({id:p.id,added:p.added}))});
+ if(url.pathname==='/photos'&&request.method==='POST'){let body;try{body=await request.json()}catch{return json({error:'Invalid photo'},400)}if(typeof body?.data!=='string'||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(body.data)||body.data.length>650000)return json({error:'JPEG photo too large or unsupported (max ~450 KB)'},413);const list=await readStore(env,'nova:photos',[]);const photo={id:crypto.randomUUID(),added:Date.now(),data:body.data};list.unshift(photo);await writeStore(env,'nova:photos',list.slice(0,12));return json({uploaded:true,id:photo.id})}
+ if(url.pathname==='/photos/test-message'&&request.method==='POST'){const photos=await readStore(env,'nova:photos',[]);if(!photos.length)return json({error:'Upload photos first'},400);const inbox=await readStore(env,storeKey,[]);const item={id:crypto.randomUUID(),time:Date.now(),who:'nova',text:'Hey, Marine. Thought you might like a photo from me. 💗',photo:photos[Math.floor(Math.random()*photos.length)].data};inbox.unshift(item);await writeStore(env,storeKey,inbox.slice(0,100));await notifySubscribers(env,item);return json({sent:true})}
+ 
  return json({error:'Not found'},404);
 }
 if(request.method!=='POST')return json({error:'Method not allowed'},405);
